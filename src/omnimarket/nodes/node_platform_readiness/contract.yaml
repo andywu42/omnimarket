@@ -1,0 +1,25 @@
+---
+name: platform_readiness
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Unified platform readiness gate. Aggregates verification dimensions into a
+  tri-state (PASS/WARN/FAIL) report with freshness-aware semantics and
+  valid-zero vs broken-zero distinction.
+
+handler_routing:
+  default_handler: handler:NodePlatformReadiness
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 60000
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.market.platform-readiness-requested.v1
+  publish_topics:
+    - onex.evt.market.platform-readiness-completed.v1

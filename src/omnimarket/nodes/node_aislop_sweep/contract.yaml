@@ -1,0 +1,25 @@
+---
+name: aislop_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Detect AI-generated quality anti-patterns across repos. Scans for phantom callables,
+  backwards-compat shims, prohibited env var patterns, hardcoded topic strings,
+  agent-left TODO/FIXME markers, and empty implementations.
+
+handler_routing:
+  default_handler: handler:NodeAislopSweep
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 120000
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.market.aislop-sweep-requested.v1
+  publish_topics:
+    - onex.evt.market.aislop-sweep-completed.v1

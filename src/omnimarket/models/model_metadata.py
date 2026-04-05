@@ -1,0 +1,38 @@
+"""Pydantic model for validating node metadata.yaml files."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class MetadataEntryPoint(BaseModel):
+    """Entry point mapping for onex.nodes."""
+
+    onex_nodes: dict[str, str] = Field(default_factory=dict, alias="onex.nodes")
+
+
+class MetadataCapabilities(BaseModel):
+    """Capability flags for a marketplace node."""
+
+    standalone: bool = True
+    full_runtime: bool = True
+    requires_network: bool = False
+    requires_repo: bool = False
+    requires_secrets: bool = False
+    requires_docker: bool = False
+    side_effect_class: str = "read_only"
+
+
+class MetadataSchema(BaseModel):
+    """Schema for node metadata.yaml files."""
+
+    name: str
+    version: str
+    description: str
+    omnibase_core_compat: str = ">=0.39.0,<1.0.0"
+    entry_points: MetadataEntryPoint = Field(default_factory=MetadataEntryPoint)
+    capabilities: MetadataCapabilities = Field(default_factory=MetadataCapabilities)
+    dependencies: list[str] = Field(default_factory=list)
+    authors: list[str] = Field(default_factory=list)
+    license: str = "MIT"
+    tags: list[str] = Field(default_factory=list)

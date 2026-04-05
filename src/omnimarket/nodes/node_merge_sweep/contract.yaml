@@ -1,0 +1,25 @@
+---
+name: merge_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: orchestrator
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Org-wide PR sweep. Classifies open PRs into merge-ready (Track A) and
+  needs-polish (Track B) queues. Enables GitHub auto-merge on ready PRs
+  and dispatches polish work on fixable PRs.
+
+handler_routing:
+  default_handler: handler:NodeMergeSweep
+
+descriptor:
+  node_archetype: orchestrator
+  purity: impure
+  idempotent: true
+  timeout_ms: 300000
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.market.merge-sweep-requested.v1
+  publish_topics:
+    - onex.evt.market.merge-sweep-completed.v1
