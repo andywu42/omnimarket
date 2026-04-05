@@ -1,0 +1,65 @@
+---
+description: Invoke OmniMarket aislop-sweep to detect AI-generated quality anti-patterns across repos.
+globs:
+  - "**/*.py"
+  - "**/contract.yaml"
+  - "**/CLAUDE.md"
+alwaysApply: false
+---
+
+# AI Slop Sweep (OmniMarket)
+
+When the user asks to run an aislop sweep, code quality scan, or AI anti-pattern
+detection, follow this procedure. **Do not implement scanning logic yourself** —
+delegate to the OmniMarket node via the event bus.
+
+## Step 1 — Assemble payload
+
+Collect any user-specified options and build the command payload:
+
+```json
+{
+  "correlation_id": "<generate a UUID v4>",
+  "repos": [],
+  "checks": [],
+  "dry_run": false,
+  "ticket": false,
+  "auto_fix": false,
+  "severity_threshold": "WARNING"
+}
+```
+
+Map user intent to payload fields:
+- "scan omniclaude and omnibase_core" → `"repos": ["omniclaude", "omnibase_core"]`
+- "just report, don't create tickets" → `"dry_run": true`
+- "create tickets for findings" → `"ticket": true`
+- "only check phantom callables" → `"checks": ["phantom-callables"]`
+
+Omit fields the user did not specify — the node applies its own defaults.
+
+## Step 2 — Publish command event
+
+Publish to the ONEX event bus:
+- **Topic:** `onex.cmd.market.aislop-sweep-requested.v1`
+- **Payload:** The assembled JSON from Step 1
+
+## Step 3 — Monitor completion
+
+Listen on the ONEX event bus:
+- **Topic:** `onex.evt.market.aislop-sweep-completed.v1`
+- **Filter:** Match `correlation_id` from Step 1
+- **Timeout:** 120000 ms
+
+## Step 4 — Format output
+
+On success, render the completion payload as a markdown table grouped by severity
+and check category. Include total counts and per-repo breakdowns.
+
+On timeout: report that the sweep timed out after 120 seconds.
+On error: surface the error message from the completion event payload.
+
+## Important
+
+This rule contains **no scanning or triage logic**. All business logic executes
+in the `aislop_sweep` OmniMarket node. This rule only handles event
+publish/subscribe and output formatting.

@@ -1,0 +1,59 @@
+---
+description: "{{SKILL_DESCRIPTION}}"
+globs:
+  - "{{GLOB_PATTERN_1}}"
+  - "{{GLOB_PATTERN_2}}"
+alwaysApply: false
+---
+
+# {{SKILL_DISPLAY_NAME}} (OmniMarket)
+
+When the user asks to {{TRIGGER_DESCRIPTION}}, follow this procedure. **Do not
+implement the logic yourself** — delegate to the OmniMarket node via the event bus.
+
+## Step 1 — Assemble payload
+
+Collect any user-specified options and build the command payload:
+
+```json
+{
+  "correlation_id": "<generate a UUID v4>",
+  "{{PAYLOAD_FIELD_1}}": "{{EXAMPLE_VALUE_1}}",
+  "{{PAYLOAD_FIELD_2}}": "{{EXAMPLE_VALUE_2}}"
+}
+```
+
+Map user intent to payload fields:
+- "{{EXAMPLE_USER_INTENT_1}}" → `"{{FIELD}}": {{VALUE}}`
+- "{{EXAMPLE_USER_INTENT_2}}" → `"{{FIELD}}": {{VALUE}}`
+
+Omit fields the user did not specify — the node applies its own defaults.
+
+## Step 2 — Publish command event
+
+Publish to the ONEX event bus:
+- **Topic:** `{{COMMAND_TOPIC}}`
+- **Payload:** The assembled JSON from Step 1
+
+Source: `contract.yaml → event_bus.subscribe_topics[0]`
+
+## Step 3 — Monitor completion
+
+Listen on the ONEX event bus:
+- **Topic:** `{{COMPLETION_TOPIC}}`
+- **Filter:** Match `correlation_id` from Step 1
+- **Timeout:** {{TIMEOUT_MS}} ms
+
+Source: `contract.yaml → event_bus.publish_topics[0]` and `descriptor.timeout_ms`
+
+## Step 4 — Format output
+
+On success, render the completion payload in a clear markdown format.
+On timeout: report that the operation timed out.
+On error: surface the error message from the completion event payload.
+
+## Important
+
+This rule contains **no business logic**. All processing executes in the
+`{{NODE_NAME}}` OmniMarket node. This rule only handles event publish/subscribe
+and output formatting.
