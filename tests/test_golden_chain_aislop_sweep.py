@@ -18,8 +18,8 @@ from omnimarket.nodes.node_aislop_sweep.handlers.handler_aislop_sweep import (
     NodeAislopSweep,
 )
 
-CMD_TOPIC = "onex.cmd.market.aislop-sweep-requested.v1"
-EVT_TOPIC = "onex.evt.market.aislop-sweep-completed.v1"
+CMD_TOPIC = "onex.cmd.omnimarket.aislop-sweep-start.v1"
+EVT_TOPIC = "onex.evt.omnimarket.aislop-sweep-completed.v1"
 
 
 @pytest.mark.unit

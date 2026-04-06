@@ -18,8 +18,28 @@ descriptor:
   idempotent: true
   timeout_ms: 120000
 
+inputs:
+  repos:
+    type: list[str]
+    description: "List of repository paths to scan"
+    required: true
+  dry_run:
+    type: bool
+    description: "If true, report findings without creating tickets"
+    required: false
+    default: false
+
+outputs:
+  findings:
+    type: list[SweepFinding]
+    description: "List of detected anti-pattern findings"
+  summary:
+    type: object
+    description: "Aggregated summary with counts by severity and check type"
+
 event_bus:
   subscribe_topics:
-    - onex.cmd.market.aislop-sweep-requested.v1
+    - onex.cmd.omnimarket.aislop-sweep-start.v1
   publish_topics:
-    - onex.evt.market.aislop-sweep-completed.v1
+    - onex.evt.omnimarket.aislop-sweep-finding.v1
+    - onex.evt.omnimarket.aislop-sweep-completed.v1

@@ -20,6 +20,6 @@ descriptor:
 
 event_bus:
   subscribe_topics:
-    - onex.cmd.market.platform-readiness-requested.v1
+    - onex.cmd.omnimarket.platform-readiness-start.v1
   publish_topics:
-    - onex.evt.market.platform-readiness-completed.v1
+    - onex.evt.omnimarket.platform-readiness-completed.v1

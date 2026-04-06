@@ -34,9 +34,9 @@ class TestMetadataSchema:
     def test_all_node_metadata_files_valid(self) -> None:
         """Every metadata.yaml in the nodes directory should validate."""
         metadata_files = list(_NODES_DIR.rglob("metadata.yaml"))
-        assert (
-            len(metadata_files) >= 3
-        ), f"Expected at least 3 metadata files, found {len(metadata_files)}"
+        assert len(metadata_files) >= 3, (
+            f"Expected at least 3 metadata files, found {len(metadata_files)}"
+        )
 
         for meta_path in metadata_files:
             with meta_path.open() as f:

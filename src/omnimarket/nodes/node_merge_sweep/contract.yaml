@@ -22,6 +22,6 @@ descriptor:
 
 event_bus:
   subscribe_topics:
-    - onex.cmd.market.merge-sweep-requested.v1
+    - onex.cmd.omnimarket.merge-sweep-start.v1
   publish_topics:
-    - onex.evt.market.merge-sweep-completed.v1
+    - onex.evt.omnimarket.merge-sweep-completed.v1

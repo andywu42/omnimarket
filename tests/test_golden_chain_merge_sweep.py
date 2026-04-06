@@ -19,8 +19,8 @@ from omnimarket.nodes.node_merge_sweep.handlers.handler_merge_sweep import (
     PRTrack,
 )
 
-CMD_TOPIC = "onex.cmd.market.merge-sweep-requested.v1"
-EVT_TOPIC = "onex.evt.market.merge-sweep-completed.v1"
+CMD_TOPIC = "onex.cmd.omnimarket.merge-sweep-start.v1"
+EVT_TOPIC = "onex.evt.omnimarket.merge-sweep-completed.v1"
 
 
 @pytest.mark.unit

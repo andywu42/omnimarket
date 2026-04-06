@@ -18,8 +18,8 @@ from omnimarket.nodes.node_platform_readiness.handlers.handler_platform_readines
     ReadinessStatus,
 )
 
-CMD_TOPIC = "onex.cmd.market.platform-readiness-requested.v1"
-EVT_TOPIC = "onex.evt.market.platform-readiness-completed.v1"
+CMD_TOPIC = "onex.cmd.omnimarket.platform-readiness-start.v1"
+EVT_TOPIC = "onex.evt.omnimarket.platform-readiness-completed.v1"
 
 
 @pytest.mark.unit
