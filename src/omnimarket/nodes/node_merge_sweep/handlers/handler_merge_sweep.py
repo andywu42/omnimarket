@@ -237,7 +237,11 @@ class NodeMergeSweep:
             if require_approval and pr.review_decision == "CHANGES_REQUESTED":
                 reason_parts.append("changes requested")
                 categories.append(FailureCategory.CHANGES_REQUESTED.value)
-            return PRTrack.B_POLISH, "Needs polish: " + ", ".join(reason_parts), categories
+            return (
+                PRTrack.B_POLISH,
+                "Needs polish: " + ", ".join(reason_parts),
+                categories,
+            )
 
         return PRTrack.SKIP, "No actionable state", []
 

@@ -7,19 +7,25 @@ Scans repository directories for common AI-slop patterns:
 - Empty implementations (bare pass in non-abstract src files)
 - TODO/FIXME markers in source code
 
-ONEX node type: COMPUTE
+ONEX node type: COMPUTE — pure, deterministic, no LLM calls.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict, Field
 
-@dataclass
-class SweepFinding:
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+
+class ModelSweepFinding(BaseModel):
     """A single finding from the aislop sweep."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     repo: str
     path: str
@@ -30,23 +36,36 @@ class SweepFinding:
     confidence: str  # HIGH | MEDIUM | LOW
     autofixable: bool = False
 
+    @property
+    def ticketable(self) -> bool:
+        """A finding is ticketable when confidence is HIGH and severity >= WARNING."""
+        return self.confidence == "HIGH" and self.severity in (
+            "CRITICAL",
+            "ERROR",
+            "WARNING",
+        )
 
-@dataclass
-class AislopSweepRequest:
+
+class AislopSweepRequest(BaseModel):
     """Input for the aislop sweep handler."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     target_dirs: list[str]
     checks: list[str] | None = None
+    dry_run: bool = False
     severity_threshold: str = "WARNING"
 
 
-@dataclass
-class AislopSweepResult:
+class AislopSweepResult(BaseModel):
     """Output of the aislop sweep handler."""
 
-    findings: list[SweepFinding] = field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    findings: list[ModelSweepFinding] = Field(default_factory=list)
     repos_scanned: int = 0
     status: str = "clean"  # clean | findings | partial | error
+    dry_run: bool = False
 
     @property
     def total_findings(self) -> int:
@@ -67,6 +86,10 @@ class AislopSweepResult:
         return counts
 
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
 _EXCLUDED_DIRS = {
     ".git",
     ".venv",
@@ -79,6 +102,7 @@ _EXCLUDED_DIRS = {
     "fixtures",
     "migrations",
     "vendored",
+    "_golden_path_validate",
 }
 
 _PROHIBITED_PATTERNS = [
@@ -102,8 +126,16 @@ _EMPTY_IMPL_PATTERN = re.compile(r"^\s+pass\s*$")
 _TODO_PATTERN = re.compile(r"\b(TODO|FIXME|HACK)\b")
 
 
+# ---------------------------------------------------------------------------
+# Handler
+# ---------------------------------------------------------------------------
+
+
 class NodeAislopSweep:
-    """Scan directories for AI-generated quality anti-patterns."""
+    """Scan directories for AI-generated quality anti-patterns.
+
+    Pure compute handler — no I/O beyond reading the target directories.
+    """
 
     ALL_CHECKS = [
         "prohibited-patterns",
@@ -116,7 +148,7 @@ class NodeAislopSweep:
     def handle(self, request: AislopSweepRequest) -> AislopSweepResult:
         """Execute the aislop sweep across target directories."""
         checks = request.checks or self.ALL_CHECKS
-        findings: list[SweepFinding] = []
+        findings: list[ModelSweepFinding] = []
         repos_scanned = 0
 
         for target_dir in request.target_dirs:
@@ -156,6 +188,7 @@ class NodeAislopSweep:
             findings=findings,
             repos_scanned=repos_scanned,
             status=status,
+            dry_run=request.dry_run,
         )
 
     def _collect_python_files(self, root: Path) -> list[Path]:
@@ -176,13 +209,13 @@ class NodeAislopSweep:
 
     def _check_prohibited(
         self, repo: str, path: str, lines: list[str]
-    ) -> list[SweepFinding]:
+    ) -> list[ModelSweepFinding]:
         findings = []
         for i, line in enumerate(lines, 1):
             for pattern, desc in _PROHIBITED_PATTERNS:
                 if pattern.search(line):
                     findings.append(
-                        SweepFinding(
+                        ModelSweepFinding(
                             repo=repo,
                             path=path,
                             line=i,
@@ -196,7 +229,7 @@ class NodeAislopSweep:
 
     def _check_hardcoded_topics(
         self, repo: str, path: str, lines: list[str]
-    ) -> list[SweepFinding]:
+    ) -> list[ModelSweepFinding]:
         if "contract.yaml" in path or "enum" in path.lower():
             return []
         findings = []
@@ -204,7 +237,7 @@ class NodeAislopSweep:
         for i, line in enumerate(lines, 1):
             if _HARDCODED_TOPIC_PATTERN.search(line):
                 findings.append(
-                    SweepFinding(
+                    ModelSweepFinding(
                         repo=repo,
                         path=path,
                         line=i,
@@ -218,7 +251,7 @@ class NodeAislopSweep:
 
     def _check_compat_shims(
         self, repo: str, path: str, lines: list[str]
-    ) -> list[SweepFinding]:
+    ) -> list[ModelSweepFinding]:
         if "test" in path.lower():
             return []
         findings = []
@@ -226,7 +259,7 @@ class NodeAislopSweep:
             for pattern, desc in _COMPAT_SHIM_PATTERNS:
                 if pattern.search(line):
                     findings.append(
-                        SweepFinding(
+                        ModelSweepFinding(
                             repo=repo,
                             path=path,
                             line=i,
@@ -240,7 +273,7 @@ class NodeAislopSweep:
 
     def _check_empty_impls(
         self, repo: str, path: str, lines: list[str]
-    ) -> list[SweepFinding]:
+    ) -> list[ModelSweepFinding]:
         basename = Path(path).stem
         if any(
             kw in basename.lower()
@@ -253,7 +286,7 @@ class NodeAislopSweep:
         for i, line in enumerate(lines, 1):
             if _EMPTY_IMPL_PATTERN.match(line):
                 findings.append(
-                    SweepFinding(
+                    ModelSweepFinding(
                         repo=repo,
                         path=path,
                         line=i,
@@ -267,7 +300,7 @@ class NodeAislopSweep:
 
     def _check_todos(
         self, repo: str, path: str, lines: list[str]
-    ) -> list[SweepFinding]:
+    ) -> list[ModelSweepFinding]:
         if "test" in path.lower() or "doc" in path.lower():
             return []
         findings = []
@@ -275,7 +308,7 @@ class NodeAislopSweep:
             match = _TODO_PATTERN.search(line)
             if match:
                 findings.append(
-                    SweepFinding(
+                    ModelSweepFinding(
                         repo=repo,
                         path=path,
                         line=i,

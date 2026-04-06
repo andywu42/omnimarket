@@ -68,7 +68,10 @@ class TestMergeSweepGoldenChain:
 
         assert len(result.track_a_update) == 1
         assert result.track_a_update[0].track == PRTrack.A_UPDATE
-        assert FailureCategory.BRANCH_STALE.value in result.track_a_update[0].failure_categories
+        assert (
+            FailureCategory.BRANCH_STALE.value
+            in result.track_a_update[0].failure_categories
+        )
 
     async def test_blocked_green_pr_classified_track_a_resolve(
         self, event_bus: EventBusInmemory
@@ -89,7 +92,10 @@ class TestMergeSweepGoldenChain:
 
         assert len(result.track_a_resolve) == 1
         assert result.track_a_resolve[0].track == PRTrack.A_RESOLVE
-        assert FailureCategory.THREADS_BLOCKED.value in result.track_a_resolve[0].failure_categories
+        assert (
+            FailureCategory.THREADS_BLOCKED.value
+            in result.track_a_resolve[0].failure_categories
+        )
 
     async def test_conflicting_pr_classified_track_b(
         self, event_bus: EventBusInmemory
@@ -110,7 +116,10 @@ class TestMergeSweepGoldenChain:
 
         assert len(result.track_b_polish) == 1
         assert "conflicts" in result.track_b_polish[0].reason
-        assert FailureCategory.CONFLICT.value in result.track_b_polish[0].failure_categories
+        assert (
+            FailureCategory.CONFLICT.value
+            in result.track_b_polish[0].failure_categories
+        )
 
     async def test_ci_failing_pr_has_failure_categories(
         self, event_bus: EventBusInmemory
@@ -129,7 +138,9 @@ class TestMergeSweepGoldenChain:
         result = handler.handle(request)
 
         assert len(result.track_b_polish) == 1
-        assert FailureCategory.CI_TEST.value in result.track_b_polish[0].failure_categories
+        assert (
+            FailureCategory.CI_TEST.value in result.track_b_polish[0].failure_categories
+        )
 
     async def test_draft_pr_skipped(self, event_bus: EventBusInmemory) -> None:
         """Draft PRs should be skipped."""
@@ -325,7 +336,9 @@ class TestFailureHistory:
         assert result.failure_history_summary.total_tracked == 3
         assert result.failure_history_summary.stuck_prs == 1  # #10 (3 consecutive)
         assert result.failure_history_summary.chronic_prs == 1  # #20 (6 consecutive)
-        assert result.failure_history_summary.recidivist_prs == 1  # #30 (3 polishes, still failing)
+        assert (
+            result.failure_history_summary.recidivist_prs == 1
+        )  # #30 (3 polishes, still failing)
 
     async def test_no_failure_history_still_works(
         self, event_bus: EventBusInmemory
