@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """NodePlatformReadiness — Unified platform readiness gate.
 
 Aggregates verification dimensions into a tri-state report:
@@ -10,12 +12,13 @@ ONEX node type: COMPUTE
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ReadinessStatus(Enum):
+class EnumReadinessStatus(StrEnum):
     """Tri-state readiness status."""
 
     PASS = "PASS"
@@ -23,20 +26,22 @@ class ReadinessStatus(Enum):
     FAIL = "FAIL"
 
 
-@dataclass
-class DimensionResult:
+class ModelDimensionResult(BaseModel):
     """Result for a single readiness dimension."""
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     name: str
-    status: ReadinessStatus
+    status: EnumReadinessStatus
     critical: bool
     freshness: str  # "current", "Xh ago", "stale", "missing"
     details: str
 
 
-@dataclass
-class DimensionInput:
+class ModelDimensionInput(BaseModel):
     """Input data for a single readiness dimension."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     critical: bool = False
@@ -46,36 +51,47 @@ class DimensionInput:
     is_mock: bool = False
 
 
-@dataclass
-class PlatformReadinessRequest:
+class ModelPlatformReadinessRequest(BaseModel):
     """Input for the platform readiness handler."""
 
-    dimensions: list[DimensionInput]
+    model_config = ConfigDict(extra="forbid")
+
+    dimensions: list[ModelDimensionInput]
     now: datetime | None = None  # Allow injection for testing
 
 
-@dataclass
-class PlatformReadinessResult:
+class ModelPlatformReadinessResult(BaseModel):
     """Output of the platform readiness handler."""
 
-    overall: ReadinessStatus = ReadinessStatus.PASS
-    dimensions: list[DimensionResult] = field(default_factory=list)
-    blockers: list[str] = field(default_factory=list)
-    degraded: list[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    model_config = ConfigDict(extra="forbid")
+
+    overall: EnumReadinessStatus = EnumReadinessStatus.PASS
+    dimensions: list[ModelDimensionResult] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    degraded: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 _STALE_THRESHOLD = timedelta(hours=24)
 _MISSING_THRESHOLD = timedelta(hours=72)
 
+# Legacy aliases for backward compatibility with existing tests
+ReadinessStatus = EnumReadinessStatus
+DimensionResult = ModelDimensionResult
+DimensionInput = ModelDimensionInput
+PlatformReadinessRequest = ModelPlatformReadinessRequest
+PlatformReadinessResult = ModelPlatformReadinessResult
+
 
 class NodePlatformReadiness:
     """Aggregate verification dimensions into a readiness report."""
 
-    def handle(self, request: PlatformReadinessRequest) -> PlatformReadinessResult:
+    def handle(
+        self, request: ModelPlatformReadinessRequest
+    ) -> ModelPlatformReadinessResult:
         """Evaluate all dimensions and produce readiness report."""
         now = request.now or datetime.now(UTC)
-        results: list[DimensionResult] = []
+        results: list[ModelDimensionResult] = []
         blockers: list[str] = []
         degraded: list[str] = []
 
@@ -83,20 +99,20 @@ class NodePlatformReadiness:
             result = self._evaluate_dimension(dim, now)
             results.append(result)
 
-            if result.status == ReadinessStatus.FAIL:
+            if result.status == EnumReadinessStatus.FAIL:
                 blockers.append(f"{result.name}: {result.details}")
-            elif result.status == ReadinessStatus.WARN:
+            elif result.status == EnumReadinessStatus.WARN:
                 degraded.append(f"{result.name}: {result.details}")
 
         # Overall status
         if blockers:
-            overall = ReadinessStatus.FAIL
+            overall = EnumReadinessStatus.FAIL
         elif degraded:
-            overall = ReadinessStatus.WARN
+            overall = EnumReadinessStatus.WARN
         else:
-            overall = ReadinessStatus.PASS
+            overall = EnumReadinessStatus.PASS
 
-        return PlatformReadinessResult(
+        return ModelPlatformReadinessResult(
             overall=overall,
             dimensions=results,
             blockers=blockers,
@@ -105,14 +121,14 @@ class NodePlatformReadiness:
         )
 
     def _evaluate_dimension(
-        self, dim: DimensionInput, now: datetime
-    ) -> DimensionResult:
+        self, dim: ModelDimensionInput, now: datetime
+    ) -> ModelDimensionResult:
         """Evaluate a single dimension with freshness rules."""
         # Mock data is always FAIL
         if dim.is_mock:
-            return DimensionResult(
+            return ModelDimensionResult(
                 name=dim.name,
-                status=ReadinessStatus.FAIL,
+                status=EnumReadinessStatus.FAIL,
                 critical=dim.critical,
                 freshness="mock",
                 details=f"Mock data detected: {dim.details}",
@@ -120,9 +136,9 @@ class NodePlatformReadiness:
 
         # Missing data
         if dim.healthy is None or dim.last_checked is None:
-            return DimensionResult(
+            return ModelDimensionResult(
                 name=dim.name,
-                status=ReadinessStatus.FAIL,
+                status=EnumReadinessStatus.FAIL,
                 critical=dim.critical,
                 freshness="missing",
                 details=dim.details or "No data available",
@@ -132,9 +148,9 @@ class NodePlatformReadiness:
         age = now - dim.last_checked
         if age > _MISSING_THRESHOLD:
             freshness = f">{int(age.total_seconds() / 3600)}h (missing)"
-            return DimensionResult(
+            return ModelDimensionResult(
                 name=dim.name,
-                status=ReadinessStatus.FAIL,
+                status=EnumReadinessStatus.FAIL,
                 critical=dim.critical,
                 freshness=freshness,
                 details=f"Data too old to trust ({freshness})",
@@ -142,9 +158,9 @@ class NodePlatformReadiness:
 
         if age > _STALE_THRESHOLD:
             freshness = f"{int(age.total_seconds() / 3600)}h ago (stale)"
-            return DimensionResult(
+            return ModelDimensionResult(
                 name=dim.name,
-                status=ReadinessStatus.WARN,
+                status=EnumReadinessStatus.WARN,
                 critical=dim.critical,
                 freshness=freshness,
                 details=dim.details or f"Stale data ({freshness})",
@@ -153,9 +169,9 @@ class NodePlatformReadiness:
         # Fresh data — use actual status
         hours = int(age.total_seconds() / 3600)
         freshness = "current" if hours == 0 else f"{hours}h ago"
-        status = ReadinessStatus.PASS if dim.healthy else ReadinessStatus.FAIL
+        status = EnumReadinessStatus.PASS if dim.healthy else EnumReadinessStatus.FAIL
 
-        return DimensionResult(
+        return ModelDimensionResult(
             name=dim.name,
             status=status,
             critical=dim.critical,
