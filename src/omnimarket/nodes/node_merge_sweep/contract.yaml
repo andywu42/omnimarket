@@ -20,6 +20,8 @@ descriptor:
   idempotent: true
   timeout_ms: 300000
 
+terminal_event: onex.evt.omnimarket.merge-sweep-completed.v1
+
 event_bus:
   subscribe_topics:
     - onex.cmd.omnimarket.merge-sweep-start.v1

@@ -9,8 +9,10 @@ description: >
   backwards-compat shims, prohibited env var patterns, hardcoded topic strings,
   agent-left TODO/FIXME markers, and empty implementations.
 
-handler_routing:
-  default_handler: handler:NodeAislopSweep
+handler:
+  module: omnimarket.nodes.node_aislop_sweep.handlers.handler_aislop_sweep
+  class: NodeAislopSweep
+  input_model: omnimarket.nodes.node_aislop_sweep.handlers.handler_aislop_sweep.AislopSweepRequest
 
 descriptor:
   node_archetype: compute
@@ -36,6 +38,8 @@ outputs:
   summary:
     type: object
     description: "Aggregated summary with counts by severity and check type"
+
+terminal_event: onex.evt.omnimarket.aislop-sweep-completed.v1
 
 event_bus:
   subscribe_topics:

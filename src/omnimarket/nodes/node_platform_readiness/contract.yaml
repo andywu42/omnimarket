@@ -18,6 +18,8 @@ descriptor:
   idempotent: true
   timeout_ms: 60000
 
+terminal_event: onex.evt.omnimarket.platform-readiness-completed.v1
+
 event_bus:
   subscribe_topics:
     - onex.cmd.omnimarket.platform-readiness-start.v1

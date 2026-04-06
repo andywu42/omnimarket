@@ -51,7 +51,7 @@ class AislopSweepRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    target_dirs: list[str]
+    target_dirs: list[str] = Field(default_factory=list)
     checks: list[str] | None = None
     dry_run: bool = False
     severity_threshold: str = "WARNING"
