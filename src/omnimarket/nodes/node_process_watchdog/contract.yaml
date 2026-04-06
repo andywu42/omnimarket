@@ -1,0 +1,66 @@
+---
+name: process_watchdog
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Infrastructure process watchdog compute node. Checks health of critical
+  platform components (emit daemon, Kafka consumers, LLM endpoints, Docker
+  containers) and emits structured health reports. Designed for periodic
+  execution via cron to detect silent failures before they compound.
+
+handler:
+  module: omnimarket.nodes.node_process_watchdog.handlers.handler_process_watchdog
+  class: HandlerProcessWatchdog
+  input_model: omnimarket.nodes.node_process_watchdog.models.model_watchdog_start_command.ModelWatchdogStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: impure
+  idempotent: true
+  timeout_ms: 60000
+
+inputs:
+  check_targets:
+    type: list[str]
+    description: "Which targets to check: emit_daemon, kafka_consumers, llm_endpoints, docker_containers"
+    required: false
+    default: ["emit_daemon", "kafka_consumers", "llm_endpoints", "docker_containers"]
+  correlation_id:
+    type: str
+    description: "Watchdog run correlation ID"
+    required: true
+  dry_run:
+    type: bool
+    description: "Run without side effects (no alerts, no restarts)"
+    required: false
+    default: false
+  alert_on_degraded:
+    type: bool
+    description: "Whether to emit alerts for DEGRADED (not just DOWN)"
+    required: false
+    default: true
+
+outputs:
+  overall_status:
+    type: str
+    description: "Aggregate status (HEALTHY, DEGRADED, DOWN)"
+  checks:
+    type: list[object]
+    description: "Individual check results"
+  alerts_emitted:
+    type: int
+    description: "Number of alerts emitted"
+  restarts_attempted:
+    type: int
+    description: "Number of auto-restart attempts"
+
+terminal_event: onex.evt.omnimarket.watchdog-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.watchdog-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.watchdog-completed.v1
+    - onex.evt.omnimarket.watchdog-alert.v1
