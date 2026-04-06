@@ -42,6 +42,7 @@ Repository = "https://github.com/OmniNode-ai/omnimarket"
 node_aislop_sweep = "omnimarket.nodes.node_aislop_sweep"
 node_merge_sweep = "omnimarket.nodes.node_merge_sweep"
 node_platform_readiness = "omnimarket.nodes.node_platform_readiness"
+node_build_loop = "omnimarket.nodes.node_build_loop"
 
 [tool.uv.sources]
 omnibase-core = { path = "../omnibase_core", editable = true }
