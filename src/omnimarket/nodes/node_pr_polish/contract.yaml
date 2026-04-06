@@ -1,0 +1,61 @@
+---
+name: pr_polish
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  PR readiness polish WorkflowPackage. Resolves merge conflicts, fixes CI
+  failures, addresses review comments, and runs local review. Phases: INIT ->
+  RESOLVE_CONFLICTS -> FIX_CI -> ADDRESS_COMMENTS -> LOCAL_REVIEW -> DONE.
+  Circuit breaker trips after 3 consecutive failures.
+
+handler:
+  module: omnimarket.nodes.node_pr_polish.handlers.handler_pr_polish
+  class: HandlerPrPolish
+  input_model: omnimarket.nodes.node_pr_polish.models.model_pr_polish_start_command.ModelPrPolishStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 300000
+
+inputs:
+  pr_number:
+    type: int
+    description: "PR number to polish"
+    required: false
+  skip_conflicts:
+    type: bool
+    description: "Skip merge conflict resolution phase"
+    required: false
+    default: false
+  dry_run:
+    type: bool
+    description: "Run without side effects"
+    required: false
+    default: false
+
+outputs:
+  final_phase:
+    type: str
+    description: "Terminal phase reached"
+  conflicts_resolved:
+    type: int
+    description: "Merge conflicts resolved"
+  ci_fixes_applied:
+    type: int
+    description: "CI fixes applied"
+  comments_addressed:
+    type: int
+    description: "Review comments addressed"
+
+terminal_event: onex.evt.omnimarket.pr-polish-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.pr-polish-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.pr-polish-phase-transition.v1
+    - onex.evt.omnimarket.pr-polish-completed.v1

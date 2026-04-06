@@ -1,0 +1,67 @@
+---
+name: hostile_reviewer
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Multi-model adversarial code review WorkflowPackage. Coordinates dispatch of
+  reviews to multiple models, aggregates findings via weighted-union, checks
+  convergence, and produces a report. Phases: INIT -> DISPATCH_REVIEWS ->
+  AGGREGATE -> CONVERGENCE_CHECK -> REPORT -> DONE.
+  Circuit breaker trips after 3 consecutive failures.
+
+handler:
+  module: omnimarket.nodes.node_hostile_reviewer.handlers.handler_hostile_reviewer
+  class: HandlerHostileReviewer
+  input_model: omnimarket.nodes.node_hostile_reviewer.models.model_hostile_reviewer_start_command.ModelHostileReviewerStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 600000
+
+inputs:
+  pr_number:
+    type: int
+    description: "PR number to review"
+    required: false
+  repo:
+    type: str
+    description: "GitHub repo (owner/repo)"
+    required: false
+  file_path:
+    type: str
+    description: "File path to review (alternative to PR)"
+    required: false
+  models:
+    type: list
+    description: "Models to use for review"
+    required: false
+    default: ["codex", "deepseek-r1"]
+  dry_run:
+    type: bool
+    description: "Run without side effects"
+    required: false
+    default: false
+
+outputs:
+  final_phase:
+    type: str
+    description: "Terminal phase reached"
+  pass_count:
+    type: int
+    description: "Number of review passes completed"
+  total_findings:
+    type: int
+    description: "Total findings across all passes"
+
+terminal_event: onex.evt.omnimarket.hostile-reviewer-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.hostile-reviewer-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.hostile-reviewer-phase-transition.v1
+    - onex.evt.omnimarket.hostile-reviewer-completed.v1

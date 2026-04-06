@@ -1,0 +1,58 @@
+---
+name: dod_verify
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  DoD evidence verification compute node. Loads a ticket contract, runs
+  evidence checks against it, and emits a structured verification report.
+  Simple single-shot computation, not a multi-phase FSM.
+
+handler:
+  module: omnimarket.nodes.node_dod_verify.handlers.handler_dod_verify
+  class: HandlerDodVerify
+  input_model: omnimarket.nodes.node_dod_verify.models.model_dod_verify_start_command.ModelDodVerifyStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 60000
+
+inputs:
+  ticket_id:
+    type: str
+    description: "Linear ticket ID (e.g. OMN-1234)"
+    required: true
+  contract_path:
+    type: str
+    description: "Override path to contract YAML"
+    required: false
+  dry_run:
+    type: bool
+    description: "Run without side effects"
+    required: false
+    default: false
+
+outputs:
+  status:
+    type: str
+    description: "Overall verification status (verified, failed, skipped)"
+  total_checks:
+    type: int
+    description: "Total evidence checks run"
+  verified_count:
+    type: int
+    description: "Checks that passed"
+  failed_count:
+    type: int
+    description: "Checks that failed"
+
+terminal_event: onex.evt.omnimarket.dod-verify-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.dod-verify-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.dod-verify-completed.v1
