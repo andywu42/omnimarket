@@ -1,0 +1,49 @@
+---
+name: close_out
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Close-out pipeline WorkflowPackage. Coordinates the multi-phase end-of-day
+  close-out workflow: MERGE_SWEEP -> DEPLOY_PLUGIN -> START_ENV -> INTEGRATION
+  -> RELEASE_CHECK -> REDEPLOY_CHECK -> DASHBOARD_SWEEP -> DONE.
+  Circuit breaker trips after 3 consecutive failures.
+
+handler:
+  module: omnimarket.nodes.node_close_out.handlers.handler_close_out
+  class: HandlerCloseOut
+  input_model: omnimarket.nodes.node_close_out.models.model_close_out_start_command.ModelCloseOutStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 300000
+
+inputs:
+  dry_run:
+    type: bool
+    description: "Run without side effects"
+    required: false
+    default: false
+
+outputs:
+  final_phase:
+    type: str
+    description: "Terminal phase reached (done or failed)"
+  prs_merged:
+    type: int
+    description: "Total PRs merged during close-out"
+  prs_polished:
+    type: int
+    description: "Total PRs polished during close-out"
+
+terminal_event: onex.evt.omnimarket.close-out-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.close-out-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.close-out-phase-transition.v1
+    - onex.evt.omnimarket.close-out-completed.v1

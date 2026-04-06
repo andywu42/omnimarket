@@ -1,0 +1,55 @@
+---
+name: ticket_pipeline
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Per-ticket execution pipeline WorkflowPackage. Coordinates the multi-phase
+  autonomous ticket pipeline: PRE_FLIGHT -> IMPLEMENT -> LOCAL_REVIEW ->
+  CREATE_PR -> TEST_ITERATE -> CI_WATCH -> PR_REVIEW -> AUTO_MERGE -> DONE.
+  Circuit breaker trips after 3 consecutive failures.
+
+handler:
+  module: omnimarket.nodes.node_ticket_pipeline.handlers.handler_ticket_pipeline
+  class: HandlerTicketPipeline
+  input_model: omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_start_command.ModelPipelineStartCommand
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 600000
+
+inputs:
+  ticket_id:
+    type: str
+    description: "Linear ticket ID (e.g. OMN-1234)"
+    required: true
+  skip_test_iterate:
+    type: bool
+    description: "Skip the TEST_ITERATE phase"
+    required: false
+    default: false
+  dry_run:
+    type: bool
+    description: "Run without side effects"
+    required: false
+    default: false
+
+outputs:
+  final_phase:
+    type: str
+    description: "Terminal phase reached (done, failed, or blocked)"
+  pr_number:
+    type: int
+    description: "PR number created during pipeline"
+
+terminal_event: onex.evt.omnimarket.ticket-pipeline-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.ticket-pipeline-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.ticket-pipeline-phase-transition.v1
+    - onex.evt.omnimarket.ticket-pipeline-completed.v1
