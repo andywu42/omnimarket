@@ -1,0 +1,21 @@
+---
+name: log_projection
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: reducer
+node_version: {major: 1, minor: 0, patch: 0}
+description: >
+  Projects structured log events from all ONEX handlers into a queryable
+  log store. Enables real-time observability of handler execution without
+  grep-based log searching.
+
+terminal_event: onex.evt.omnimarket.log-projection-snapshot.v1
+
+handler:
+  module: omnimarket.nodes.node_log_projection.handlers.handler_log_projection
+  class: NodeLogProjection
+
+event_bus:
+  subscribe_topics:
+    - onex.evt.platform.log-entry.v1
+  publish_topics:
+    - onex.evt.omnimarket.log-projection-snapshot.v1

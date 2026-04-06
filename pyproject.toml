@@ -55,6 +55,13 @@ node_dashboard_sweep = "omnimarket.nodes.node_dashboard_sweep"
 node_data_flow_sweep = "omnimarket.nodes.node_data_flow_sweep"
 node_golden_chain_sweep = "omnimarket.nodes.node_golden_chain_sweep"
 node_runtime_sweep = "omnimarket.nodes.node_runtime_sweep"
+node_design_to_plan = "omnimarket.nodes.node_design_to_plan"
+node_ticket_work = "omnimarket.nodes.node_ticket_work"
+node_create_ticket = "omnimarket.nodes.node_create_ticket"
+node_plan_to_tickets = "omnimarket.nodes.node_plan_to_tickets"
+node_release = "omnimarket.nodes.node_release"
+node_redeploy = "omnimarket.nodes.node_redeploy"
+node_log_projection = "omnimarket.nodes.node_log_projection"
 
 [tool.uv.sources]
 omnibase-core = { path = "../omnibase_core", editable = true }
