@@ -49,6 +49,12 @@ node_hostile_reviewer = "omnimarket.nodes.node_hostile_reviewer"
 node_local_review = "omnimarket.nodes.node_local_review"
 node_pr_polish = "omnimarket.nodes.node_pr_polish"
 node_dod_verify = "omnimarket.nodes.node_dod_verify"
+node_coverage_sweep = "omnimarket.nodes.node_coverage_sweep"
+node_compliance_sweep = "omnimarket.nodes.node_compliance_sweep"
+node_dashboard_sweep = "omnimarket.nodes.node_dashboard_sweep"
+node_data_flow_sweep = "omnimarket.nodes.node_data_flow_sweep"
+node_golden_chain_sweep = "omnimarket.nodes.node_golden_chain_sweep"
+node_runtime_sweep = "omnimarket.nodes.node_runtime_sweep"
 
 [tool.uv.sources]
 omnibase-core = { path = "../omnibase_core", editable = true }

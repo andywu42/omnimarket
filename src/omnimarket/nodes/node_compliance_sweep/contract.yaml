@@ -1,0 +1,53 @@
+---
+name: compliance_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Handler contract compliance sweep — scans repos for imperative handlers that
+  bypass the ONEX contract system, detects hardcoded topics, undeclared transports,
+  missing handler routing, logic-in-node, and wire schema mismatches.
+
+handler:
+  module: omnimarket.nodes.node_compliance_sweep.handlers.handler_compliance_sweep
+  class: NodeComplianceSweep
+  input_model: omnimarket.nodes.node_compliance_sweep.handlers.handler_compliance_sweep.ComplianceSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 180000
+
+inputs:
+  repos:
+    type: list[str]
+    description: "List of repository paths to scan"
+    required: true
+  checks:
+    type: list[str]
+    description: "Specific checks to run (default: all)"
+    required: false
+  dry_run:
+    type: bool
+    description: "If true, report violations without creating tickets"
+    required: false
+    default: false
+
+outputs:
+  violations:
+    type: list[ComplianceViolation]
+    description: "List of detected compliance violations"
+  summary:
+    type: object
+    description: "Aggregated summary with verdicts and violation counts"
+
+terminal_event: onex.evt.omnimarket.compliance-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.compliance-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.compliance-sweep-violation.v1
+    - onex.evt.omnimarket.compliance-sweep-completed.v1

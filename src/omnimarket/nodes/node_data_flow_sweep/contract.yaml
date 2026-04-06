@@ -1,0 +1,49 @@
+---
+name: data_flow_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  End-to-end data flow verification — for each topic, verify producer status,
+  consumer lag, DB table row counts, and field mapping correctness across the
+  entire Kafka-to-DB-to-dashboard pipeline.
+
+handler:
+  module: omnimarket.nodes.node_data_flow_sweep.handlers.handler_data_flow_sweep
+  class: NodeDataFlowSweep
+  input_model: omnimarket.nodes.node_data_flow_sweep.handlers.handler_data_flow_sweep.DataFlowSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 180000
+
+inputs:
+  flows:
+    type: list[FlowInput]
+    description: "List of data flows to verify with topic, handler, table info"
+    required: true
+  dry_run:
+    type: bool
+    description: "If true, report findings without creating tickets"
+    required: false
+    default: false
+
+outputs:
+  flow_results:
+    type: list[FlowResult]
+    description: "Per-flow verification results with status at each stage"
+  summary:
+    type: object
+    description: "Aggregated flow health summary"
+
+terminal_event: onex.evt.omnimarket.data-flow-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.data-flow-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.data-flow-sweep-result.v1
+    - onex.evt.omnimarket.data-flow-sweep-completed.v1

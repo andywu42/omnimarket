@@ -1,0 +1,57 @@
+---
+name: dashboard_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Full dashboard audit — classify pages as HEALTHY, EMPTY, MOCK, BROKEN, or
+  FLAG_GATED, triage into problem domains, assign fix tiers, and track
+  fix iterations until all pages are healthy.
+
+handler:
+  module: omnimarket.nodes.node_dashboard_sweep.handlers.handler_dashboard_sweep
+  class: NodeDashboardSweep
+  input_model: omnimarket.nodes.node_dashboard_sweep.handlers.handler_dashboard_sweep.DashboardSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 300000
+
+inputs:
+  pages:
+    type: list[PageInput]
+    description: "List of pages to audit with route and optional console errors"
+    required: true
+  max_iterations:
+    type: int
+    description: "Maximum fix-reaudit iterations"
+    required: false
+    default: 3
+  dry_run:
+    type: bool
+    description: "If true, report findings without dispatching fix agents"
+    required: false
+    default: false
+
+outputs:
+  page_statuses:
+    type: list[PageStatus]
+    description: "Per-page classification results"
+  domains:
+    type: list[ProblemDomain]
+    description: "Grouped problem domains with fix tiers"
+  summary:
+    type: object
+    description: "Aggregated counts by page status and fix tier"
+
+terminal_event: onex.evt.omnimarket.dashboard-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.dashboard-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.dashboard-sweep-page-classified.v1
+    - onex.evt.omnimarket.dashboard-sweep-completed.v1

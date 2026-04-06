@@ -1,0 +1,57 @@
+---
+name: runtime_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Runtime registration and wiring verification — checks node descriptions are real,
+  all contract-declared handlers are wired in dispatch, all topics have both
+  producer and consumer, and container logs are free of repeated errors.
+
+handler:
+  module: omnimarket.nodes.node_runtime_sweep.handlers.handler_runtime_sweep
+  class: NodeRuntimeSweep
+  input_model: omnimarket.nodes.node_runtime_sweep.handlers.handler_runtime_sweep.RuntimeSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 180000
+
+inputs:
+  contracts:
+    type: list[ContractInput]
+    description: "Contract definitions with node name, description, handler, and topics"
+    required: true
+  topic_producers:
+    type: list[str]
+    description: "All known producer topics across repos"
+    required: false
+  topic_consumers:
+    type: list[str]
+    description: "All known consumer topics across repos"
+    required: false
+  dry_run:
+    type: bool
+    description: "If true, report findings without creating tickets"
+    required: false
+    default: false
+
+outputs:
+  findings:
+    type: list[RuntimeFinding]
+    description: "All detected registration and wiring issues"
+  summary:
+    type: object
+    description: "Aggregated counts by finding type"
+
+terminal_event: onex.evt.omnimarket.runtime-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.runtime-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.runtime-sweep-finding.v1
+    - onex.evt.omnimarket.runtime-sweep-completed.v1

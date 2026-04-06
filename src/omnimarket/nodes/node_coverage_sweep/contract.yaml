@@ -1,0 +1,53 @@
+---
+name: coverage_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Measure test coverage across Python repos, flag modules below threshold,
+  identify zero-coverage blind spots, and prioritize gaps by recency and severity.
+
+handler:
+  module: omnimarket.nodes.node_coverage_sweep.handlers.handler_coverage_sweep
+  class: NodeCoverageSweep
+  input_model: omnimarket.nodes.node_coverage_sweep.handlers.handler_coverage_sweep.CoverageSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 300000
+
+inputs:
+  repos:
+    type: list[str]
+    description: "List of repository paths to scan for coverage"
+    required: true
+  target_pct:
+    type: int
+    description: "Minimum coverage percentage threshold"
+    required: false
+    default: 50
+  dry_run:
+    type: bool
+    description: "If true, report gaps without creating tickets"
+    required: false
+    default: false
+
+outputs:
+  gaps:
+    type: list[CoverageGap]
+    description: "Modules below coverage threshold"
+  summary:
+    type: object
+    description: "Aggregated summary with total modules, below-target count, averages"
+
+terminal_event: onex.evt.omnimarket.coverage-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.coverage-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.coverage-sweep-gap.v1
+    - onex.evt.omnimarket.coverage-sweep-completed.v1

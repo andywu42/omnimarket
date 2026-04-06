@@ -1,0 +1,49 @@
+---
+name: golden_chain_sweep
+contract_version: {major: 1, minor: 0, patch: 0}
+node_type: compute
+node_version: {major: 1, minor: 0, patch: 0}
+
+description: >
+  Validate end-to-end Kafka-to-DB-projection data flow for golden chains.
+  Publishes synthetic events with correlation IDs, polls projection tables
+  for matching rows, and asserts field-level correctness.
+
+handler:
+  module: omnimarket.nodes.node_golden_chain_sweep.handlers.handler_golden_chain_sweep
+  class: NodeGoldenChainSweep
+  input_model: omnimarket.nodes.node_golden_chain_sweep.handlers.handler_golden_chain_sweep.GoldenChainSweepRequest
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 180000
+
+inputs:
+  chains:
+    type: list[ChainDefinition]
+    description: "Chain definitions with head topic, tail table, and expected fields"
+    required: true
+  timeout_ms:
+    type: int
+    description: "Timeout per chain validation in milliseconds"
+    required: false
+    default: 15000
+
+outputs:
+  chain_results:
+    type: list[ChainResult]
+    description: "Per-chain validation results with timing and field assertions"
+  summary:
+    type: object
+    description: "Overall sweep status (pass/partial/fail) with chain counts"
+
+terminal_event: onex.evt.omnimarket.golden-chain-sweep-completed.v1
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omnimarket.golden-chain-sweep-start.v1
+  publish_topics:
+    - onex.evt.omnimarket.golden-chain-sweep-result.v1
+    - onex.evt.omnimarket.golden-chain-sweep-completed.v1
