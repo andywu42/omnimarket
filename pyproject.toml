@@ -76,6 +76,7 @@ node_rsd_fill_compute = "omnimarket.nodes.node_rsd_fill_compute.handlers.handler
 node_loop_state_reducer = "omnimarket.nodes.node_loop_state_reducer.handlers.handler_loop_state:HandlerLoopState"
 node_ticket_classify_compute = "omnimarket.nodes.node_ticket_classify_compute.handlers.handler_ticket_classify:HandlerTicketClassify"
 node_build_dispatch_effect = "omnimarket.nodes.node_build_dispatch_effect.handlers.handler_build_dispatch:HandlerBuildDispatch"
+node_closeout_effect = "omnimarket.nodes.node_closeout_effect.handlers.handler_closeout:HandlerCloseout"
 
 [tool.uv.sources]
 omnibase-core = { path = "../omnibase_core", editable = true }
