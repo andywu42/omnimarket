@@ -46,6 +46,19 @@ class ModelProjectionResult(BaseModel):
 class HandlerProjectionSessionOutcome:
     """Project session-outcome events into session_outcomes table."""
 
+    def handle(self, input_data: dict[str, object]) -> dict[str, object]:
+        """RuntimeLocal handler protocol shim.
+
+        Delegates to project() with a ModelSessionOutcomeEvent and
+        a DatabaseAdapter from input_data['_db'].
+        """
+        db_raw = input_data.pop("_db", None)
+        if not isinstance(db_raw, DatabaseAdapter):
+            raise TypeError("handle() requires a DatabaseAdapter in input_data['_db']")
+        event = ModelSessionOutcomeEvent(**input_data)
+        result = self.project(event, db_raw)
+        return result.model_dump(mode="json")
+
     def project(
         self,
         event: ModelSessionOutcomeEvent,
