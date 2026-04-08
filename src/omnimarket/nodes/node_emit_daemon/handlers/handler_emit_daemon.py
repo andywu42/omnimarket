@@ -16,6 +16,7 @@ Circuit breaker: after 3 consecutive startup failures, transitions to FAILED.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from omnimarket.nodes.node_emit_daemon.models.model_daemon_state import (
     EnumEmitDaemonPhase,
@@ -132,6 +133,27 @@ class HandlerEmitDaemon:
             events_dropped=self._state.events_dropped,
             error=error,
         )
+
+    def handle(self, input_data: dict[str, Any]) -> dict[str, Any]:
+        """RuntimeLocal handler protocol shim.
+
+        Delegates to the appropriate lifecycle transition based on the
+        'action' field in input_data.
+        """
+        action = input_data.get("action", "status")
+        if action == "start":
+            socket_path = input_data.get("socket_path", "/tmp/omni-emit.sock")
+            pid = input_data.get("pid", 0)
+            self.transition_to_binding(socket_path, pid)
+            self.transition_to_listening()
+            return self._state.model_dump(mode="json")
+        if action == "stop":
+            completed = self.transition_to_stopped(
+                events_published=input_data.get("events_published", 0),
+                events_dropped=input_data.get("events_dropped", 0),
+            )
+            return completed.model_dump(mode="json")
+        return self._state.model_dump(mode="json")
 
     def record_event_queued(self) -> None:
         """Increment queued counter."""

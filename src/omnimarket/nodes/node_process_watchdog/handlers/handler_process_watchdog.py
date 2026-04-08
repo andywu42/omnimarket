@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from omnibase_compat.protocols.protocol_health_check import (
     ProtocolHealthCheck as CheckTarget,
@@ -176,6 +177,26 @@ class HandlerProcessWatchdog:
     def serialize_completed(self, event: ModelWatchdogCompletedEvent) -> bytes:
         """Serialize a completed event to bytes."""
         return json.dumps(event.model_dump(mode="json")).encode()
+
+    def handle(self, input_data: dict[str, Any]) -> dict[str, Any]:
+        """RuntimeLocal handler protocol shim.
+
+        Delegates to run_watchdog with a ModelWatchdogStartCommand and
+        InmemoryCheckTarget instances constructed from input_data.
+        """
+        targets_data = input_data.pop("targets", [])
+        command = ModelWatchdogStartCommand(**input_data)
+        targets: list[CheckTarget] = [
+            InmemoryCheckTarget(
+                name=t["name"],
+                category=EnumCheckTarget(t["category"]),
+                status=EnumCheckStatus(t.get("status", "healthy")),
+                message=t.get("message", ""),
+            )
+            for t in targets_data
+        ]
+        report, _completed = self.run_watchdog(command, targets)
+        return report.model_dump(mode="json")
 
     def run_watchdog(
         self,

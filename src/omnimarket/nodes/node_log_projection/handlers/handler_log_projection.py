@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -150,6 +151,23 @@ class NodeLogProjection:
             by_level=new_by_level,
             last_entry_at=entry.timestamp,
         )
+
+    @staticmethod
+    def handle(input_data: dict[str, Any]) -> dict[str, Any]:
+        """RuntimeLocal handler protocol shim.
+
+        Delegates to project() with a ModelLogEntry and empty initial state,
+        returning the updated projection state.
+        """
+        state_data = input_data.pop("state", None)
+        state = (
+            ModelLogProjectionState(**state_data)
+            if state_data
+            else ModelLogProjectionState()
+        )
+        entry = ModelLogEntry(**input_data)
+        new_state = NodeLogProjection.project(entry, state)
+        return new_state.model_dump(mode="json")
 
     @staticmethod
     def query(
