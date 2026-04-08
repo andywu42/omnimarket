@@ -36,6 +36,7 @@ from omnimarket.nodes.node_build_loop_orchestrator.handlers.adapter_delegation_r
     EnumModelTier,
     ModelEndpointConfig,
     build_endpoint_configs,
+    route_to_template,
 )
 from omnimarket.nodes.node_build_loop_orchestrator.protocols.protocol_sub_handlers import (
     BuildTarget,
@@ -67,6 +68,46 @@ def _load_delegation_topic() -> str:
 
 
 _DEFAULT_DELEGATION_TOPIC: str = _load_delegation_topic()
+
+# Root of all node directories — used to load template handler source
+_NODES_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _load_template_source(template_node_id: str) -> str:
+    """Load handler source from a template node directory.
+
+    Returns the concatenated source of all .py files under the template node's
+    handlers/ subdirectory, or an empty string if the node does not exist.
+    """
+    # Reject path traversal attempts: no slashes, backslashes, or leading dots
+    if not template_node_id or "/" in template_node_id or "\\" in template_node_id:
+        logger.warning(
+            "Invalid template_node_id (path separator): %s", template_node_id
+        )
+        return ""
+    if template_node_id.startswith("."):
+        logger.warning(
+            "Invalid template_node_id (starts with dot): %s", template_node_id
+        )
+        return ""
+    handlers_dir = _NODES_ROOT / template_node_id / "handlers"
+    # Confirm the resolved path stays under _NODES_ROOT
+    try:
+        handlers_dir.resolve().relative_to(_NODES_ROOT.resolve())
+    except ValueError:
+        logger.warning("template_node_id escapes nodes root: %s", template_node_id)
+        return ""
+    if not handlers_dir.is_dir():
+        logger.warning("Template node handlers not found: %s", handlers_dir)
+        return ""
+    parts: list[str] = []
+    for py_file in sorted(handlers_dir.glob("*.py")):
+        try:
+            parts.append(py_file.read_text(encoding="utf-8"))
+        except OSError as exc:
+            logger.warning("Could not read template file %s: %s", py_file, exc)
+    return "\n\n".join(parts)
+
 
 _CODER_SYSTEM_PROMPT = """\
 You are an autonomous code refactoring agent for the OmniNode platform.
@@ -197,8 +238,13 @@ class AdapterLlmDispatch:
                 continue
 
             try:
-                # Generate plan via model router (handles failover) with source context
-                plan, coder_model = await self._generate_plan(target)
+                # Select template node (FSM vs compute) for coder context.
+                # Use explicit override from target if set; otherwise default to
+                # the compute template (route_to_template("") returns _COMPUTE_TEMPLATE_NODE).
+                template_node_id = target.template_node_id or route_to_template("")
+
+                # Generate plan via model router (handles failover + tier routing)
+                plan, coder_model = await self._generate_plan(target, template_node_id)
 
                 # Review via reasoning model (if available)
                 review: dict[str, object] = {
@@ -220,6 +266,7 @@ class AdapterLlmDispatch:
                     "delegated_to": coder_model,
                     "coder_model": coder_model,
                     "reviewer_model": reviewer_model,
+                    "template_node_id": template_node_id,
                 }
 
                 payloads.append(
@@ -422,18 +469,24 @@ class AdapterLlmDispatch:
         return raw_response
 
     async def _generate_plan(
-        self, target: BuildTarget
+        self,
+        target: BuildTarget,
+        template_node_id: str = "node_data_flow_sweep",
     ) -> tuple[dict[str, object], str]:
         """Generate implementation plan via the model router with source context.
 
         Loads source context (template + target handler + models) to ground the
         prompt, then dispatches via AdapterModelRouter for failover-safe generation.
 
+        Loads template source from the selected template node (FSM vs compute)
+        and injects it into the prompt for pattern-guided code generation.
+
         Returns:
             Tuple of (parsed plan dict, model name used).
         """
         template_source, target_source, model_sources = self._load_source_context(
             target_node_dir=self._resolve_node_dir(target.ticket_id),
+            template_node_dir=_NODES_ROOT / template_node_id,
         )
 
         user_prompt = self._build_coder_prompt(
