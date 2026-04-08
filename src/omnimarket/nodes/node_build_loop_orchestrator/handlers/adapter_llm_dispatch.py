@@ -3,6 +3,12 @@
 """Adapter that dispatches ticket builds via multi-model LLM code generation.
 
 Implements ProtocolBuildDispatchHandler for live build loop execution.
+Routes tickets to the appropriate model tier:
+- Simple tasks -> local Qwen3-14B (fast)
+- Medium tasks -> local Qwen3-Coder-30B (64K ctx)
+- Complex tasks -> frontier models (Gemini, OpenAI)
+- Review -> GLM-4.7-Flash (cheap frontier reviewer, 203K ctx)
+
 Uses the existing LLM infrastructure from omnibase_infra:
 - AdapterLlmProviderOpenai for OpenAI-compatible inference (health checks, failover)
 - AdapterModelRouter for multi-provider routing with round-robin fallback
@@ -18,6 +24,7 @@ onex.evt.omnimarket.delegation-metrics.v1.
 
 Related:
     - OMN-7854: Add source context loading
+    - OMN-7856: Wire GLM-4.7-Flash as code reviewer
     - OMN-7810: Wire build loop to Linear queue
     - OMN-7855: Add dispatch tracing to .onex_state/
     - OMN-7858: Add dispatch metrics summary
@@ -34,8 +41,10 @@ import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
+import httpx
 import yaml
 from omnibase_infra.adapters.llm.adapter_llm_provider_openai import (
     AdapterLlmProviderOpenai,
@@ -44,6 +53,7 @@ from omnibase_infra.adapters.llm.adapter_model_router import AdapterModelRouter
 from omnibase_infra.adapters.llm.model_llm_adapter_request import (
     ModelLlmAdapterRequest,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 from omnimarket.nodes.node_build_loop_orchestrator.handlers.adapter_delegation_router import (
     EnumModelTier,
@@ -360,23 +370,78 @@ Output ONLY the complete refactored Python file. Do not add explanations, markdo
 """
 
 _REVIEW_SYSTEM_PROMPT = """\
-You are a code review agent. Review the proposed implementation plan and code changes.
-Check for:
-1. Correctness: Will the changes achieve the ticket's goal?
-2. Safety: Any security issues, data loss risks, or breaking changes?
-3. Completeness: Are tests included? Are edge cases handled?
+You are a code review agent. Review the implementation plan JSON for structural correctness.
 
-Respond with a JSON object:
+Check specifically:
+1. Required keys present — does the plan contain "ticket_id", "implementation_plan", and "code_changes"?
+2. Plausible values — are file paths, actions ("modify"|"create"), and approach strings non-empty and sensible?
+3. No obviously hallucinated ticket IDs — does the plan's ticket_id match the one in the user prompt?
+4. Risk assessment — based on the number of files changed and complexity, assign an overall risk level.
+
+You MUST respond with ONLY a JSON object, no prose, no explanation:
 {
-  "approved": true/false,
-  "issues": ["list of issues found"],
-  "suggestions": ["list of improvements"],
-  "risk_level": "low|medium|high"
+  "approved": true,
+  "issues": [{"line": null, "severity": "major", "message": "missing required key 'code_changes'"}],
+  "risk_level": "low"
 }
+
+severity must be "minor", "major", or "critical".
+risk_level must be "low", "medium", or "high".
+issues must be an array (empty array if none).
 """
 
 # 48K char budget leaves headroom for Qwen3-Coder's 64K context
 _DEFAULT_MAX_CONTEXT_CHARS: int = 48000
+
+
+# ---------------------------------------------------------------------------
+# Structured review output schema
+# ---------------------------------------------------------------------------
+
+
+class ModelReviewIssue(BaseModel):
+    """A single issue found during code review."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    line: int | None = Field(default=None, description="Line number, if known.")
+    severity: Literal["minor", "major", "critical"] = Field(
+        ..., description="Issue severity."
+    )
+    message: str = Field(..., description="Issue description.")
+
+
+class ModelReviewResult(BaseModel):
+    """Structured output from the GLM-4.7-Flash code reviewer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    approved: bool = Field(..., description="Whether the code is approved.")
+    issues: list[ModelReviewIssue] = Field(
+        default_factory=list, description="Issues found."
+    )
+    risk_level: Literal["low", "medium", "high"] = Field(
+        ..., description="Overall risk level."
+    )
+
+
+class ModelPlanSchema(BaseModel):
+    """Minimal required shape for a generated implementation plan.
+
+    Plans that do not validate against this schema are treated as invalid
+    and rejected before review — preventing a raw_response fallback from
+    ever being accepted.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    ticket_id: str = Field(..., description="Ticket ID this plan targets.")
+    implementation_plan: dict[str, object] = Field(
+        ..., description="Plan details (approach, files, complexity, test strategy)."
+    )
+    code_changes: list[dict[str, object]] = Field(
+        ..., description="List of file-level changes."
+    )
 
 
 def _build_provider_from_endpoint(
@@ -413,6 +478,9 @@ class AdapterLlmDispatch:
     """Dispatches ticket builds via multi-model LLM code generation.
 
     Implements ProtocolBuildDispatchHandler for live orchestrator wiring.
+    Routes each ticket to the appropriate model tier based on complexity,
+    using both local models (Qwen3, DeepSeek) and frontier APIs (Gemini, OpenAI).
+
     Uses AdapterModelRouter from omnibase_infra for model selection with
     health checks, failover, and round-robin load balancing.
 
@@ -425,11 +493,13 @@ class AdapterLlmDispatch:
         *,
         endpoint_configs: dict[EnumModelTier, ModelEndpointConfig] | None = None,
         delegation_topic: str | None = None,
+        allow_unreviewed: bool = False,
         router: AdapterModelRouter | None = None,
         state_dir: Path | None = None,
     ) -> None:
         self._endpoints = endpoint_configs or build_endpoint_configs()
         self._delegation_topic = delegation_topic or _DEFAULT_DELEGATION_TOPIC
+        self._allow_unreviewed = allow_unreviewed
         self._router = router
         self._router_initialized = router is not None
         self._state_dir = state_dir or _get_state_dir()
@@ -440,8 +510,9 @@ class AdapterLlmDispatch:
             self._providers[tier] = _build_provider_from_endpoint(tier.value, endpoint)
 
         logger.info(
-            "LLM dispatch initialized with providers: %s",
+            "LLM dispatch initialized with tiers: %s (allow_unreviewed=%s)",
             ", ".join(t.value for t in sorted(self._endpoints.keys(), key=str)),
+            allow_unreviewed,
         )
 
     async def _ensure_router(self) -> AdapterModelRouter:
@@ -509,21 +580,76 @@ class AdapterLlmDispatch:
                     )
                     continue
 
-                # Review via reasoning model (if available)
-                review: dict[str, object] = {
-                    "approved": True,
-                    "issues": [],
-                    "risk_level": "unknown",
-                }
-                reviewer_model = "none"
-                if EnumModelTier.LOCAL_REASONING in self._providers:
-                    review, reviewer_model = await self._review_plan(target, plan)
+                # Validate plan shape before review — raw_response fallbacks must not pass
+                plan_valid = True
+                plan_rejection_data: dict[str, object] = {}
+                try:
+                    ModelPlanSchema.model_validate(plan)
+                except Exception as val_exc:
+                    plan_valid = False
+                    plan_rejection_data = {
+                        "issues": [{"severity": "critical", "message": str(val_exc)}],
+                        "risk_level": "high",
+                    }
+                    logger.warning(
+                        "Plan schema validation failed for %s: %s — rejecting",
+                        target.ticket_id,
+                        val_exc,
+                    )
+
+                if not plan_valid:
+                    rejection_payload: dict[str, object] = {
+                        "ticket_id": target.ticket_id,
+                        "title": target.title,
+                        "implementation_plan": plan,
+                        "review_result": plan_rejection_data,
+                        "review_status": "rejected",
+                        "accepted": False,
+                        "correlation_id": str(correlation_id),
+                        "generated_at": datetime.now(tz=UTC).isoformat(),
+                        "delegated_to": coder_model,
+                        "coder_model": coder_model,
+                        "reviewer_model": "schema-validator",
+                    }
+                    payloads.append(
+                        DelegationPayload(
+                            topic=self._delegation_topic, payload=rejection_payload
+                        )
+                    )
+                    total_dispatched += 1
+                    continue
+
+                # Review via FRONTIER_REVIEW (GLM-4.7-Flash) if available
+                review_status: str
+                review_data: dict[str, object]
+                reviewer_model: str
+
+                if EnumModelTier.FRONTIER_REVIEW in self._endpoints:
+                    reviewer_endpoint = self._endpoints[EnumModelTier.FRONTIER_REVIEW]
+                    reviewer_model = reviewer_endpoint.model_id
+                    review_status, review_data = await self._review_plan(
+                        target, plan, reviewer_endpoint
+                    )
+                else:
+                    # No reviewer configured — unavailable
+                    review_status = "unavailable"
+                    review_data = {"issues": [], "risk_level": "unknown"}
+                    reviewer_model = "none"
+                    logger.warning(
+                        "No FRONTIER_REVIEW endpoint configured for %s — review unavailable",
+                        target.ticket_id,
+                    )
+
+                # Determine acceptance under review policy
+                accepted = self._is_accepted(review_status, review_data)
 
                 payload_data: dict[str, object] = {
                     "ticket_id": target.ticket_id,
                     "title": target.title,
                     "implementation_plan": plan,
-                    "review_result": review,
+                    "review_result": review_data,
+                    "review_status": review_status,
+                    "accepted": accepted,
                     "correlation_id": str(correlation_id),
                     "generated_at": datetime.now(tz=UTC).isoformat(),
                     "delegated_to": coder_model,
@@ -540,10 +666,11 @@ class AdapterLlmDispatch:
                 )
                 total_dispatched += 1
                 logger.info(
-                    "LLM dispatch: generated plan for %s via %s (approved=%s)",
+                    "LLM dispatch: generated plan for %s via %s (review_status=%s, accepted=%s)",
                     target.ticket_id,
                     coder_model,
-                    review.get("approved", "unknown"),
+                    review_status,
+                    accepted,
                 )
 
             except Exception as exc:
@@ -574,6 +701,26 @@ class AdapterLlmDispatch:
             total_dispatched=total_dispatched,
             delegation_payloads=tuple(payloads),
         )
+
+    def _is_accepted(self, review_status: str, review_data: dict[str, object]) -> bool:
+        """Determine acceptance under review policy.
+
+        Rules:
+        - review_status="approved": accepted
+        - review_status="rejected": rejected
+        - review_status="unavailable": accepted only if allow_unreviewed=True
+        - review_status="failed" or "malformed": always rejected
+        """
+        if review_status == "approved":
+            return True
+        if review_status == "unavailable":
+            if self._allow_unreviewed:
+                logger.warning(
+                    "Accepting unreviewed output (allow_unreviewed=True, review_status=unavailable)"
+                )
+                return True
+            return False
+        return False
 
     def _build_coder_prompt(
         self,
@@ -862,48 +1009,130 @@ class AdapterLlmDispatch:
         self,
         target: BuildTarget,
         plan: dict[str, object],
-    ) -> tuple[dict[str, object], str]:
-        """Review implementation plan via the reasoning provider.
+        endpoint: ModelEndpointConfig,
+    ) -> tuple[str, dict[str, object]]:
+        """Review implementation plan via GLM-4.7-Flash (FRONTIER_REVIEW tier).
 
-        Returns:
-            Tuple of (review result dict, reviewer model name).
+        Returns (review_status, review_data) where review_status is one of:
+        - "approved": reviewer approved the plan
+        - "rejected": reviewer rejected with issues
+        - "unavailable": endpoint unreachable
+        - "malformed": reviewer returned non-JSON after retry
+        - "failed": parsing failed after retry
+
+        Never returns a status that collapses to auto-approval.
+        Retries once on malformed JSON before marking failed.
         """
         user_prompt = (
             f"Ticket: {target.ticket_id} — {target.title}\n\n"
             f"Implementation plan:\n{json.dumps(plan, indent=2, default=str)[:8000]}\n\n"
-            f"Review this plan."
+            f"Review this plan and output only a JSON object."
         )
 
-        prompt = f"{_REVIEW_SYSTEM_PROMPT}\n\n{user_prompt}"
+        for attempt in range(1, 3):  # max 2 attempts
+            try:
+                raw = await self._call_endpoint(
+                    endpoint, _REVIEW_SYSTEM_PROMPT, user_prompt
+                )
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "Review endpoint unreachable for %s (attempt %d): %s",
+                    target.ticket_id,
+                    attempt,
+                    exc,
+                )
+                return "unavailable", {"issues": [], "risk_level": "unknown"}
 
-        provider = self._providers.get(EnumModelTier.LOCAL_REASONING)
-        if provider is None:
-            return {"approved": True, "issues": [], "risk_level": "unknown"}, "none"
+            # Try to parse structured review output
+            parsed_result = self._parse_review_response(raw)
+            if parsed_result is None:
+                logger.warning(
+                    "Review returned malformed JSON for %s (attempt %d)",
+                    target.ticket_id,
+                    attempt,
+                )
+                if attempt == 2:
+                    return "failed", {
+                        "raw_response": raw,
+                        "issues": [],
+                        "risk_level": "unknown",
+                    }
+                # Retry
+                continue
 
-        endpoint = self._endpoints[EnumModelTier.LOCAL_REASONING]
-        request = ModelLlmAdapterRequest(
-            prompt=prompt,
-            model_name=endpoint.model_id,
-            max_tokens=4096,
-            temperature=0.1,
-        )
+            review_status = "approved" if parsed_result.approved else "rejected"
+            return review_status, parsed_result.model_dump()
+
+        # Should not reach here, but guard
+        return "failed", {"issues": [], "risk_level": "unknown"}
+
+    @staticmethod
+    def _parse_review_response(raw: str) -> ModelReviewResult | None:
+        """Parse reviewer response into ModelReviewResult.
+
+        Handles JSON wrapped in markdown fences or bare JSON.
+        Returns None if parsing fails or schema validation fails.
+        """
+        # Strip markdown fences if present
+        text = raw.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            # Drop first line (```json or ```) and last line (```)
+            inner = (
+                "\n".join(lines[1:-1])
+                if lines[-1].strip() == "```"
+                else "\n".join(lines[1:])
+            )
+            text = inner.strip()
 
         try:
-            response = await provider.generate_async(request)
-            model_used = response.model_used
-            review_result: dict[str, object] = json.loads(response.generated_text)
-            return review_result, model_used
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning(
-                "Review failed for %s: %s — defaulting to approved",
-                target.ticket_id,
-                exc,
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+
+        try:
+            return ModelReviewResult.model_validate(data)
+        except Exception:
+            return None
+
+    @staticmethod
+    async def _call_endpoint(
+        endpoint: ModelEndpointConfig,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.2,
+    ) -> str:
+        """Call an OpenAI-compatible endpoint."""
+        payload = {
+            "model": endpoint.model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_tokens": endpoint.max_tokens,
+            "temperature": temperature,
+        }
+
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if endpoint.api_key:
+            headers["Authorization"] = f"Bearer {endpoint.api_key}"
+
+        # BigModel's /api/paas/v4 base already includes the version prefix;
+        # appending /v1/chat/completions would produce an invalid double-versioned path.
+        chat_path = (
+            "/chat/completions"
+            if "/paas/v4" in endpoint.base_url
+            else "/v1/chat/completions"
+        )
+        async with httpx.AsyncClient(timeout=endpoint.timeout_seconds) as client:
+            resp = await client.post(
+                f"{endpoint.base_url}{chat_path}",
+                json=payload,
+                headers=headers,
             )
-            return {
-                "approved": True,
-                "issues": [],
-                "risk_level": "unknown",
-            }, endpoint.model_id
+            resp.raise_for_status()
+            data = resp.json()
+            return str(data["choices"][0]["message"]["content"])
 
     @staticmethod
     def _make_dry_run_payload(
