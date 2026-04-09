@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omnimarket"
-version = "0.1.0"
+version = "0.2.0"
 description = "OmniMarket - Portable ONEX workflow package registry"
 authors = [
     {name = "OmniNode.ai", email = "contact@omninode.ai"}
@@ -89,8 +89,9 @@ node_plan_to_tickets = "omnimarket.nodes.node_plan_to_tickets.handlers.handler_p
 node_release = "omnimarket.nodes.node_release.handlers.handler_release:HandlerRelease"
 node_redeploy = "omnimarket.nodes.node_redeploy.handlers.handler_redeploy:HandlerRedeploy"
 node_baseline_capture = "omnimarket.nodes.node_baseline_capture.handlers.handler_baseline_capture:HandlerBaselineCapture"
-node_baseline_compare = "omnimarket.nodes.node_baseline_compare.handlers.handler_baseline_compare:HandlerBaselineCompare"
+node_baseline_compare = "omnimarket.nodes.node_baseline_compare"
 node_pr_lifecycle_triage_compute = "omnimarket.nodes.node_pr_lifecycle_triage_compute.handlers.handler_pr_lifecycle_triage:HandlerPrLifecycleTriage"
+node_nightly_loop_controller = "omnimarket.nodes.node_nightly_loop_controller"
 node_pr_lifecycle_inventory_compute = "omnimarket.nodes.node_pr_lifecycle_inventory_compute.handlers.handler_pr_lifecycle_inventory:HandlerPrLifecycleInventory"
 node_pr_lifecycle_fix_effect = "omnimarket.nodes.node_pr_lifecycle_fix_effect.handlers.handler_pr_lifecycle_fix:HandlerPrLifecycleFix"
 
