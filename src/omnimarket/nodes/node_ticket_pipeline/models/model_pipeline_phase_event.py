@@ -1,4 +1,6 @@
-"""ModelPipelinePhaseEvent — emitted on each pipeline phase transition."""
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+"""Phase transition event for the ticket pipeline FSM."""
 
 from __future__ import annotations
 
@@ -13,12 +15,12 @@ from omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_state import (
 
 
 class ModelPipelinePhaseEvent(BaseModel):
-    """Emitted when the ticket pipeline transitions between phases."""
+    """Emitted on every phase transition (success or failure)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    correlation_id: UUID = Field(...)
-    ticket_id: str = Field(...)
+    correlation_id: UUID = Field(..., description="Pipeline run correlation ID.")
+    ticket_id: str = Field(..., description="Linear ticket ID.")
     from_phase: EnumPipelinePhase = Field(...)
     to_phase: EnumPipelinePhase = Field(...)
     success: bool = Field(...)
