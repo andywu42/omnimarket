@@ -29,6 +29,7 @@ Related:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -63,7 +64,11 @@ from omnimarket.nodes.node_build_loop_orchestrator.protocols.protocol_sub_handle
     ProtocolVerifyHandler,
     ScoredTicket,
 )
-from omnimarket.nodes.node_build_loop_orchestrator.topics import TOPIC_DOD_CHECKED
+from omnimarket.nodes.node_build_loop_orchestrator.topics import (
+    TOPIC_DOD_CHECKED,
+    TOPIC_OVERSEER_VERIFICATION_COMPLETED,
+    TOPIC_OVERSEER_VERIFY_REQUESTED,
+)
 from omnimarket.nodes.node_overseer_verifier.handlers.handler_overseer_verifier import (
     HandlerOverseerVerifier,
 )
@@ -72,11 +77,14 @@ from omnimarket.nodes.node_overseer_verifier.models.model_verifier_request impor
 )
 
 if TYPE_CHECKING:
+    from omnibase_core.models.event_bus.model_event_message import ModelEventMessage
     from omnibase_core.protocols.event_bus.protocol_event_bus_publisher import (
         ProtocolEventBusPublisher,
     )
 
 logger = logging.getLogger(__name__)
+
+_VERIFIER_TIMEOUT_SECONDS = 120
 
 
 def _load_contract(contract_path: Path | None = None) -> dict[str, Any]:
@@ -126,6 +134,7 @@ class HandlerBuildLoopOrchestrator:
         self._fsm = HandlerBuildLoop()
         self._closeout = closeout
         self._verify = verify
+        self._verify_explicitly_injected: bool = verify is not None
         self._rsd_fill = rsd_fill
         self._classify = classify
         self._dispatch = dispatch
@@ -318,13 +327,10 @@ class HandlerBuildLoopOrchestrator:
                 return True, None, metrics
 
             if phase == EnumBuildLoopPhase.VERIFYING:
-                result = await self._verify.handle(
+                return await self._run_overseer_verify(
                     correlation_id=correlation_id,
                     dry_run=dry_run,
                 )
-                if not result.all_critical_passed:
-                    return False, "Critical verification checks failed", metrics
-                return True, None, metrics
 
             if phase == EnumBuildLoopPhase.FILLING:
                 fill_result = await self._rsd_fill.handle(
@@ -429,6 +435,109 @@ class HandlerBuildLoopOrchestrator:
                 correlation_id,
             )
             return False, str(exc), metrics
+
+    async def _run_overseer_verify(
+        self,
+        correlation_id: UUID,
+        dry_run: bool,
+    ) -> tuple[bool, str | None, dict[str, int]]:
+        """VERIFYING phase: publish verify command, await correlated verdict.
+
+        1. Publish onex.cmd.overseer.verify-requested.v1 with correlation_id
+        2. Await onex.evt.overseer.verification-completed.v1 filtered by correlation_id
+        3. Timeout after _VERIFIER_TIMEOUT_SECONDS → FAILED
+        4. passed=False → FAILED with failed_criteria surfaced
+        5. passed=True → advance to FILLING
+
+        If event_bus is None, dry_run=True, or a verify handler was explicitly injected
+        at construction time, fall back to the legacy verify handler. The overseer event
+        path is only taken when event_bus is present AND no legacy verify handler was
+        injected (i.e. the auto-wired default is in use).
+        """
+        if self._event_bus is None or self._verify_explicitly_injected or dry_run:
+            # No event bus: fall back to legacy verify handler for standalone/dry-run
+            assert self._verify is not None
+            result = await self._verify.handle(
+                correlation_id=correlation_id,
+                dry_run=dry_run,
+            )
+            if not result.all_critical_passed:
+                return False, "Critical verification checks failed", {}
+            return True, None, {}
+
+        # 1. Publish verify command
+        verify_cmd = json.dumps(
+            {
+                "correlation_id": str(correlation_id),
+                "requested_by": "build_loop_orchestrator",
+                "timestamp": datetime.now(tz=UTC).isoformat(),
+            }
+        ).encode()
+        await self._event_bus.publish(
+            topic=TOPIC_OVERSEER_VERIFY_REQUESTED,
+            key=None,
+            value=verify_cmd,
+        )
+        logger.info(
+            "[BUILD-LOOP-ORCH] Published overseer verify command (correlation_id=%s)",
+            correlation_id,
+        )
+
+        # 2. Await correlated verdict via asyncio.Event / subscription
+        verdict_event: asyncio.Event = asyncio.Event()
+        verdict_payload: dict[str, Any] = {}
+
+        async def on_verification_completed(msg: ModelEventMessage) -> None:
+            try:
+                data = json.loads(msg.value)
+            except (json.JSONDecodeError, ValueError):
+                return
+            if str(data.get("correlation_id")) == str(correlation_id):
+                verdict_payload.update(data)
+                verdict_event.set()
+
+        # Register callback on event bus if it supports subscribe; otherwise poll
+        if hasattr(self._event_bus, "subscribe"):
+            await self._event_bus.subscribe(
+                TOPIC_OVERSEER_VERIFICATION_COMPLETED,
+                on_message=on_verification_completed,
+                group_id=f"build-loop-overseer-wait-{correlation_id}",
+            )
+
+        try:
+            await asyncio.wait_for(
+                verdict_event.wait(), timeout=_VERIFIER_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.warning(
+                "[BUILD-LOOP-ORCH] Overseer verifier timed out after %ds "
+                "(correlation_id=%s)",
+                _VERIFIER_TIMEOUT_SECONDS,
+                correlation_id,
+            )
+            return False, "verifier_timeout", {}
+
+        # 3. Evaluate verdict
+        passed = bool(verdict_payload.get("passed", False))
+        if not passed:
+            failed_criteria = verdict_payload.get("failed_criteria", [])
+            reason = (
+                "; ".join(str(c) for c in failed_criteria)
+                if failed_criteria
+                else "overseer verification failed"
+            )
+            logger.warning(
+                "[BUILD-LOOP-ORCH] Overseer verifier FAILED: %s (correlation_id=%s)",
+                reason,
+                correlation_id,
+            )
+            return False, reason, {}
+
+        logger.info(
+            "[BUILD-LOOP-ORCH] Overseer verifier PASSED (correlation_id=%s)",
+            correlation_id,
+        )
+        return True, None, {}
 
     async def _publish_dod_event(
         self,
