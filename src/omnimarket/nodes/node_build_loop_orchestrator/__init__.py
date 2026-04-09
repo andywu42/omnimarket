@@ -1,26 +1,44 @@
-"""node_build_loop_orchestrator -- top-level build loop orchestrator.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#!/usr/bin/env python3
 
-Composes 6 sub-handlers via FSM reducer (HandlerBuildLoop). Takes
-protocol-based dependencies for closeout, verify, rsd_fill, classify,
-and dispatch handlers. Emits phase transition events via event bus.
-
-Related:
-    - OMN-7583: Migrate build loop orchestrator to omnimarket
-    - OMN-7575: Build loop migration epic
+"""
+Orchestrates build loop processes.
+Manages the execution flow of build loops, tracking state and dispatching commands.
 """
 
-from omnimarket.nodes.node_build_loop_orchestrator.handlers.handler_build_loop_orchestrator import (
-    HandlerBuildLoopOrchestrator,
-)
-from omnimarket.nodes.node_build_loop_orchestrator.models.model_loop_cycle_summary import (
+from .models import (
+    ModelDispatchMetrics,
+    ModelDispatchTrace,
+    ModelLiveRunnerConfig,
     ModelLoopCycleSummary,
-)
-from omnimarket.nodes.node_build_loop_orchestrator.models.model_orchestrator_result import (
+    ModelOrchestratorCompletedEvent,
     ModelOrchestratorResult,
+    ModelOrchestratorStartCommand,
+    ModelOrchestratorState,
+    ModelPhaseCommandIntent,
+)
+from .protocols import (
+    ProtocolBuildDispatchHandler,
+    ProtocolCloseoutHandler,
+    ProtocolRsdFillHandler,
+    ProtocolTicketClassifyHandler,
+    ProtocolVerifyHandler,
 )
 
 __all__ = [
-    "HandlerBuildLoopOrchestrator",
+    "ModelDispatchMetrics",
+    "ModelDispatchTrace",
+    "ModelLiveRunnerConfig",
     "ModelLoopCycleSummary",
+    "ModelOrchestratorCompletedEvent",
     "ModelOrchestratorResult",
+    "ModelOrchestratorStartCommand",
+    "ModelOrchestratorState",
+    "ModelPhaseCommandIntent",
+    "ProtocolBuildDispatchHandler",
+    "ProtocolCloseoutHandler",
+    "ProtocolRsdFillHandler",
+    "ProtocolTicketClassifyHandler",
+    "ProtocolVerifyHandler",
 ]

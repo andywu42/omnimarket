@@ -1,24 +1,22 @@
-"""node_ticket_pipeline — Per-ticket execution pipeline WorkflowPackage."""
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#!/usr/bin/env python3
 
-from omnimarket.nodes.node_ticket_pipeline.handlers.handler_ticket_pipeline import (
-    HandlerTicketPipeline,
-)
-from omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_completed_event import (
+"""
+This module handles the ticket pipeline orchestration.
+It manages the lifecycle of ticket processing tasks including start,
+completion, and phase transitions.
+"""
+
+from .handlers import HandlerTicketPipeline
+from .models import (
     ModelPipelineCompletedEvent,
-)
-from omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_phase_event import (
     ModelPipelinePhaseEvent,
-)
-from omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_start_command import (
     ModelPipelineStartCommand,
-)
-from omnimarket.nodes.node_ticket_pipeline.models.model_pipeline_state import (
-    EnumPipelinePhase,
     ModelPipelineState,
 )
 
 __all__ = [
-    "EnumPipelinePhase",
     "HandlerTicketPipeline",
     "ModelPipelineCompletedEvent",
     "ModelPipelinePhaseEvent",
