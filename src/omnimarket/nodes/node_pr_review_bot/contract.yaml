@@ -63,7 +63,7 @@ handler_routing:
 
   adapters:
     - name: "AdapterGitHubBridge"
-      module: "omnimarket.nodes.node_pr_review_bot.handlers.adapter_github_bridge"
+      module: "omnimarket.nodes.node_pr_review_bot.adapter_github_bridge"
       description: "Abstracts all gh api / gh pr CLI calls behind a protocol."
 
     - name: "AdapterInferenceBridge"
