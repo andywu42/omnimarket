@@ -109,6 +109,10 @@ node_autopilot_orchestrator = "omnimarket.nodes.node_autopilot_orchestrator.hand
 node_session_bootstrap = "omnimarket.nodes.node_session_bootstrap.handlers.handler_session_bootstrap:HandlerSessionBootstrap"
 node_session_post_mortem = "omnimarket.nodes.node_session_post_mortem.handlers.handler_session_post_mortem:HandlerSessionPostMortem"
 node_onboarding = "omnimarket.nodes.node_onboarding.handlers.handler_onboarding:HandlerOnboarding"
+node_integration_test_runner = "omnimarket.nodes.node_integration_test_runner.handlers.handler_integration_test_runner:HandlerIntegrationTestRunner"
+
+[project.scripts]
+onex-integration-test-runner = "omnimarket.nodes.node_integration_test_runner.cli:main"
 
 [project.entry-points."onex.node_package"]
 omnimarket = "omnimarket.nodes"
