@@ -106,6 +106,7 @@ node_pr_lifecycle_merge_effect = "omnimarket.nodes.node_pr_lifecycle_merge_effec
 node_overseer_verifier = "omnimarket.nodes.node_overseer_verifier.handlers.handler_overseer_verifier:HandlerOverseerVerifier"
 node_retention_cleanup = "omnimarket.nodes.node_retention_cleanup.handlers.handler_retention_cleanup:NodeRetentionCleanup"
 node_session_bootstrap = "omnimarket.nodes.node_session_bootstrap.handlers.handler_session_bootstrap:HandlerSessionBootstrap"
+node_session_post_mortem = "omnimarket.nodes.node_session_post_mortem.handlers.handler_session_post_mortem:HandlerSessionPostMortem"
 
 [project.entry-points."onex.node_package"]
 omnimarket = "omnimarket.nodes"
