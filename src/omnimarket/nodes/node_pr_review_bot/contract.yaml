@@ -61,6 +61,12 @@ handler_routing:
         module: "omnimarket.nodes.node_pr_review_bot.handlers.handler_report_poster"
       description: "Posts final summary PR comment with verdict + finding count. Side-effect (I/O)."
 
+    - operation: "emergency_bypass"
+      handler:
+        name: "HandlerEmergencyBypassParser"
+        module: "omnimarket.nodes.node_pr_review_bot.handlers.handler_emergency_bypass_parser"
+      description: "Parses EMERGENCY-BYPASS comments, records audit signal in Kafka + DB. Side-effect (I/O)."
+
   adapters:
     - name: "AdapterGitHubBridge"
       module: "omnimarket.nodes.node_pr_review_bot.adapter_github_bridge"
@@ -157,6 +163,16 @@ event_bus:
     - onex.evt.omnimarket.pr-review-bot-thread-posted.v1
     - onex.evt.omnimarket.pr-review-bot-thread-verified.v1
     - onex.evt.omnimarket.pr-review-bot-completed.v1
+    - onex.evt.omnimarket.review-bot-bypass-used.v1
+    - onex.evt.omnimarket.review-bot-bypass-rolled-back.v1
+
+runtime_config:
+  review_bot.emergency_bypass_actor:
+    # OMN-8497: default is the solo repo owner. Override to restrict further.
+    # Empty string means no one is authorized (full lockdown mode).
+    description: "GitHub handle(s) authorized to trigger emergency bypass. Comma-separated for multiple actors. Set to empty string to disable bypass entirely."
+    default: "jonahgabriel"
+    required: false
 
 dependencies:
   nodes:
