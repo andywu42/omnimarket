@@ -356,12 +356,20 @@ class HandlerOvernight:
                 # OMN-8405: phase-end envelope after the phase settles (before
                 # halt-condition evaluation so we always emit a terminal signal
                 # even when a halt breaks the loop on the next line).
+                # OMN-8437: propagate SKIPPED signal — dispatchers that return
+                # (False, "SKIPPED: ...") must not appear as "failed" in events.
+                if not success and error_msg and error_msg.startswith("SKIPPED:"):
+                    _phase_status = "skipped"
+                elif success:
+                    _phase_status = "success"
+                else:
+                    _phase_status = "failed"
                 self._publish(
                     TOPIC_OVERNIGHT_PHASE_END,
                     {
                         "correlation_id": command.correlation_id,
                         "phase": phase.value,
-                        "phase_status": "success" if success else "failed",
+                        "phase_status": _phase_status,
                         "error_message": error_msg,
                         "duration_ms": duration_ms,
                         "accumulated_cost_usd": accumulated_cost,
@@ -665,13 +673,14 @@ def _dispatch_ci_watch(
     """Dispatch CI watch.
 
     ``HandlerCiWatch`` requires a concrete PR + repo to poll; those are not
-    available at the overnight session level. MVP returns success in dry_run
-    and logs a warning otherwise. A follow-up must wire this from the PRs
-    touched by the build loop phase above.
+    available at the overnight session level. Returns a typed skip failure so
+    callers see an explicit SKIPPED outcome rather than a silent success.
+
+    A follow-up must wire PR refs from the build_loop_orchestrator phase into
+    this dispatcher before it can perform real work.
     """
-    if not command.dry_run:
-        logger.warning("[OVERNIGHT] ci_watch dispatched without PR context — skipping")
-    return True, None
+    logger.warning("[OVERNIGHT] ci_watch dispatched without PR context — skipping")
+    return False, "SKIPPED: no PR context available for ci_watch phase"
 
 
 def _dispatch_platform_readiness(
