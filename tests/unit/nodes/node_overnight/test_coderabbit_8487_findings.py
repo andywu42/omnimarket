@@ -489,7 +489,7 @@ def test_pr_blocked_minutes_falls_back_to_status_check_when_no_timeline_event(
 
 
 # ---------------------------------------------------------------------------
-# Finding 5: topic namespace — onex.evt.omnimarket.overseer.tick.v1
+# Finding 5: topic namespace — onex.evt.omnimarket.overseer-tick.v1
 # ---------------------------------------------------------------------------
 
 
@@ -503,8 +503,8 @@ def test_overseer_tick_topic_uses_omnimarket_namespace() -> None:
     assert "omnimarket" in TOPIC_OVERSEER_TICK, (
         f"TOPIC_OVERSEER_TICK={TOPIC_OVERSEER_TICK!r} must contain 'omnimarket' namespace"
     )
-    assert TOPIC_OVERSEER_TICK == "onex.evt.omnimarket.overseer.tick.v1", (
-        f"Expected 'onex.evt.omnimarket.overseer.tick.v1', got {TOPIC_OVERSEER_TICK!r}"
+    assert TOPIC_OVERSEER_TICK == "onex.evt.omnimarket.overseer-tick.v1", (
+        f"Expected 'onex.evt.omnimarket.overseer-tick.v1', got {TOPIC_OVERSEER_TICK!r}"
     )
 
 
