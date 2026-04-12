@@ -108,7 +108,10 @@ class TestReconcilerUnauthorizedResolution:
             head_sha="11223344",
         )
         rest.post_pr_comment.assert_called_once()
-        _, call_kwargs = rest.post_pr_comment.call_args[0], rest.post_pr_comment.call_args
+        _, call_kwargs = (
+            rest.post_pr_comment.call_args[0],
+            rest.post_pr_comment.call_args,
+        )
         body = call_kwargs[0][2]
         assert "onex review bot" in body.lower()
 

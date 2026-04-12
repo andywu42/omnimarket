@@ -62,7 +62,9 @@ class TestReviewBotGateMergeSweep:
         result = handler.handle(ModelMergeSweepRequest(prs=[pr]))
         assert len(result.track_a_merge) == 1
 
-    def test_review_bot_gate_none_with_blocked_status_goes_to_track_a_resolve(self) -> None:
+    def test_review_bot_gate_none_with_blocked_status_goes_to_track_a_resolve(
+        self,
+    ) -> None:
         """Legacy path: MERGEABLE+BLOCKED+green checks = waiting for thread resolution."""
         handler = NodeMergeSweep()
         pr = _base_pr(
@@ -98,8 +100,18 @@ class TestReviewBotGateMergeSweep:
         handler = NodeMergeSweep()
         prs = [
             _base_pr(number=1, merge_state_status="CLEAN", review_bot_gate_passed=True),
-            _base_pr(number=2, merge_state_status="CLEAN", required_checks_pass=True, review_bot_gate_passed=False),
-            _base_pr(number=3, merge_state_status="BLOCKED", required_checks_pass=True, review_bot_gate_passed=None),
+            _base_pr(
+                number=2,
+                merge_state_status="CLEAN",
+                required_checks_pass=True,
+                review_bot_gate_passed=False,
+            ),
+            _base_pr(
+                number=3,
+                merge_state_status="BLOCKED",
+                required_checks_pass=True,
+                review_bot_gate_passed=None,
+            ),
         ]
         result = handler.handle(ModelMergeSweepRequest(prs=prs))
         assert len(result.track_a_merge) == 1

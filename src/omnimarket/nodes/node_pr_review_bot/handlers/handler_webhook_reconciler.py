@@ -99,9 +99,7 @@ class HandlerWebhookReconciler:
         self._graphql = github_graphql
         self._rest = github_rest
         self._kafka = kafka_publisher
-        self._bypass_actors: frozenset[str] = frozenset(
-            authorized_bypass_actors or []
-        )
+        self._bypass_actors: frozenset[str] = frozenset(authorized_bypass_actors or [])
 
     def handle(
         self,
@@ -189,9 +187,7 @@ class HandlerWebhookReconciler:
 
     def _reopen_thread(self, thread_id: str) -> None:
         try:
-            self._graphql.execute(
-                _REOPEN_GRAPHQL, {"threadId": thread_id}
-            )
+            self._graphql.execute(_REOPEN_GRAPHQL, {"threadId": thread_id})
         except Exception:
             logger.exception(
                 "WebhookReconciler: GraphQL reopen failed for thread %s", thread_id

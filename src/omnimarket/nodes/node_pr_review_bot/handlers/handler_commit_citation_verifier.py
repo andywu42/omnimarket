@@ -226,9 +226,7 @@ class HandlerCommitCitationVerifier:
                     ref = match.group(1)
                     if ref in open_set and ref not in seen:
                         citations.append(
-                            ThreadCitation(
-                                thread_id=ref, sha=sha, commit_message=msg
-                            )
+                            ThreadCitation(thread_id=ref, sha=sha, commit_message=msg)
                         )
                         seen.add(ref)
 
@@ -275,9 +273,7 @@ class HandlerCommitCitationVerifier:
     ) -> CitationVerifyResult:
         """Bot resolves the thread via GraphQL and emits Kafka event."""
         try:
-            self._graphql.execute(
-                _RESOLVE_GRAPHQL, {"threadId": citation.thread_id}
-            )
+            self._graphql.execute(_RESOLVE_GRAPHQL, {"threadId": citation.thread_id})
         except Exception:
             logger.exception(
                 "CommitCitationVerifier: GraphQL resolve failed for thread %s",
@@ -330,9 +326,7 @@ class HandlerCommitCitationVerifier:
             "Push an updated fix and include `Fixes <thread_id>` in your commit message."
         )
         try:
-            self._rest.post_thread_reply(
-                repo, pr_number, citation.thread_id, body
-            )
+            self._rest.post_thread_reply(repo, pr_number, citation.thread_id, body)
         except Exception:
             logger.exception(
                 "CommitCitationVerifier: failed to post failure reply for thread %s",
@@ -378,4 +372,3 @@ __all__: list[str] = [
     "HandlerCommitCitationVerifier",
     "ThreadCitation",
 ]
-

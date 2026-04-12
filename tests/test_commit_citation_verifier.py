@@ -204,7 +204,11 @@ class TestCommitStatusUpdate:
         )
         assert result.all_resolved is True
         rest.post_commit_status.assert_called_once()
-        call_args = rest.post_commit_status.call_args[1] if rest.post_commit_status.call_args[1] else {}
+        call_args = (
+            rest.post_commit_status.call_args[1]
+            if rest.post_commit_status.call_args[1]
+            else {}
+        )
         # positional args: repo, sha, state, context, description
         pos_args = rest.post_commit_status.call_args[0]
         state = call_args.get("state") or pos_args[2]
