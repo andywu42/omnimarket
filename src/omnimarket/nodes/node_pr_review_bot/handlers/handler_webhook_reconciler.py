@@ -8,7 +8,7 @@ If the actor that resolved the thread is not the designated review bot
 
 1. Re-opens the thread via resolveReviewThread GraphQL mutation (reversed).
 2. Posts a comment explaining that only the bot may resolve threads.
-3. Emits a Kafka event: onex.evt.review_bot.thread_reopened.v1
+3. Emits a Kafka event: onex.evt.omnimarket.review-bot-thread-reopened.v1
 
 This closes the CodeRabbit self-resolution loophole entirely.
 """

@@ -13,7 +13,7 @@ the finding. If verification passes, the bot resolves the thread via
 GraphQL. If it fails, it posts a reply explaining why.
 
 Also emits:
-  - onex.evt.review_bot.thread_resolved.v1 on bot resolution
+  - onex.evt.omnimarket.review-bot-thread-resolved.v1 on bot resolution
 """
 
 from __future__ import annotations
@@ -259,13 +259,12 @@ class HandlerCommitCitationVerifier:
 
         if passed:
             return self._resolve_thread(pr_number, repo, sha, citation)
-        else:
-            self._post_failure_reply(pr_number, repo, citation, finding_desc)
-            return CitationVerifyResult(
-                thread_id=citation.thread_id,
-                resolved=False,
-                reason="hostile_reviewer did not verify the fix",
-            )
+        self._post_failure_reply(pr_number, repo, citation, finding_desc)
+        return CitationVerifyResult(
+            thread_id=citation.thread_id,
+            resolved=False,
+            reason="hostile_reviewer did not verify the fix",
+        )
 
     def _resolve_thread(
         self,
@@ -373,9 +372,10 @@ class HandlerCommitCitationVerifier:
 
 
 __all__: list[str] = [
+    "STATUS_CONTEXT",
     "CitationVerifyResult",
     "CommitVerificationResult",
     "HandlerCommitCitationVerifier",
-    "STATUS_CONTEXT",
     "ThreadCitation",
 ]
+

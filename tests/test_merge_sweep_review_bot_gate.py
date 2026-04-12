@@ -10,7 +10,6 @@ from omnimarket.nodes.node_merge_sweep.handlers.handler_merge_sweep import (
     ModelMergeSweepRequest,
     ModelPRInfo,
     NodeMergeSweep,
-    PRTrack,
 )
 
 

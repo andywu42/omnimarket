@@ -10,7 +10,6 @@ import pytest
 
 from omnimarket.nodes.node_pr_review_bot.handlers.handler_webhook_reconciler import (
     HandlerWebhookReconciler,
-    ReconcilerResult,
 )
 from omnimarket.nodes.node_pr_review_bot.topics import TOPIC_THREAD_REOPENED
 

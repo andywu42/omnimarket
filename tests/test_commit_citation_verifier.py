@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from omnimarket.nodes.node_pr_review_bot.handlers.handler_commit_citation_verifier import (
-    HandlerCommitCitationVerifier,
     STATUS_CONTEXT,
+    HandlerCommitCitationVerifier,
 )
 from omnimarket.nodes.node_pr_review_bot.topics import TOPIC_THREAD_RESOLVED
 
