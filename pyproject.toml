@@ -87,6 +87,7 @@ node_finding_aggregator_compute = "omnimarket.nodes.node_finding_aggregator_comp
 node_pr_snapshot_effect = "omnimarket.nodes.node_pr_snapshot_effect"
 node_pr_health_monitor = "omnimarket.nodes.node_pr_health_monitor"
 node_pr_review_bot = "omnimarket.nodes.node_pr_review_bot"
+node_review_thread_reconciler = "omnimarket.nodes.node_review_thread_reconciler"
 node_design_to_plan = "omnimarket.nodes.node_design_to_plan"
 node_ticket_work = "omnimarket.nodes.node_ticket_work"
 node_create_ticket = "omnimarket.nodes.node_create_ticket"
