@@ -248,7 +248,7 @@ class TestPrLifecycleMergeEffectEventBus:
 
         async def on_triage_completed(message: object) -> None:
             payload: dict[str, object] = {}
-            if isinstance(message, (bytes, bytearray)):
+            if isinstance(message, bytes | bytearray):
                 payload = json.loads(message.decode())
             elif isinstance(message, str):
                 payload = json.loads(message)
