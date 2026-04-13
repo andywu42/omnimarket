@@ -145,6 +145,7 @@ node_agent_coordinator_orchestrator = "omnimarket.nodes.node_agent_coordinator_o
 node_swarm_supervisor_orchestrator = "omnimarket.nodes.node_swarm_supervisor_orchestrator"
 node_handoff_effect = "omnimarket.nodes.node_handoff_effect"
 node_session_orchestrator = "omnimarket.nodes.node_session_orchestrator"
+node_quality_scoring_compute = "omnimarket.nodes.node_quality_scoring_compute"
 
 [project.scripts]
 onex-integration-test-runner = "omnimarket.nodes.node_integration_test_runner.cli:main"
@@ -232,6 +233,10 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "omnimarket.nodes.node_pr_review_bot.adapter_github_bridge"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["radon", "radon.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
