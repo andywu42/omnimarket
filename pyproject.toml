@@ -144,6 +144,7 @@ node_persona_lifecycle_orchestrator = "omnimarket.nodes.node_persona_lifecycle_o
 node_agent_coordinator_orchestrator = "omnimarket.nodes.node_agent_coordinator_orchestrator"
 node_swarm_supervisor_orchestrator = "omnimarket.nodes.node_swarm_supervisor_orchestrator"
 node_handoff_effect = "omnimarket.nodes.node_handoff_effect"
+node_session_orchestrator = "omnimarket.nodes.node_session_orchestrator"
 
 [project.scripts]
 onex-integration-test-runner = "omnimarket.nodes.node_integration_test_runner.cli:main"
