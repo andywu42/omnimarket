@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeSkillDispatchEngineOrchestrator
+# Skill: dispatch_engine
+#
+# Orchestrator shell node: dispatches skill invocations to the polymorphic
+# agent via HandlerSkillRequested. Scaffold — live dispatch returns a
+# "dispatched" placeholder; real wiring is follow-up work.
+
+name: node_skill_dispatch_engine_orchestrator
+contract_name: node_skill_dispatch_engine_orchestrator
+node_name: node_skill_dispatch_engine_orchestrator
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: ORCHESTRATOR_GENERIC
+
+description: >
+  Orchestrator node for the dispatch_engine skill.
+  Polls the work backlog and dispatches builders for gaps. Scaffold only:
+  live dispatch returns a "dispatched" string placeholder — real dispatch
+  wiring is follow-up work. Subscribes to command events, emits outcome
+  events on success or failure.
+
+input_model:
+  name: ModelSkillRequest
+  module: omnimarket.nodes.node_skill_dispatch_engine_orchestrator.models
+
+output_model:
+  name: ModelSkillResult
+  module: omnimarket.nodes.node_skill_dispatch_engine_orchestrator.models
+
+execution:
+  backend: claude_code
+  model_purpose: null
+
+event_bus:
+  subscribe:
+    topic: "onex.cmd.omnimarket.dispatch_engine.v1"
+    consumer_group: "omnimarket.skill.dispatch_engine"
+  publish:
+    success_topic: "onex.evt.omnimarket.dispatch_engine-completed.v1"
+    failure_topic: "onex.evt.omnimarket.dispatch_engine-failed.v1"
+
+capabilities:
+  - name: skill.dispatch_engine
+    description: Dispatch dispatch_engine skill to polymorphic agent
+    version: 1.0.0
+
+io_operations:
+  - operation: skill_requested
+    description: Dispatch dispatch_engine skill invocation to polymorphic agent
+    handler_method: handle_skill_requested
+    input_fields:
+      - skill_name: str
+      - skill_path: str
+      - args: dict[str, str]
+      - dry_run: bool
+    output_fields:
+      - skill_name: str
+      - status: str
+    idempotent: false
+
+dependencies:
+  - name: handler_skill_requested
+    type: handler
+    function: HandlerSkillRequested
+    module: omnimarket.nodes.node_skill_dispatch_engine_orchestrator.handlers
+    pluggable: false
+
+error_handling:
+  retry_policy:
+    max_retries: 2
+    initial_delay_ms: 500
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - SkillDispatchError
+      - SkillTimeoutError
+  circuit_breaker:
+    enabled: false
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  maturity: stub
+  ticket: OMN-8821
+  tags:
+    - orchestrator
+    - skill
+    - dispatch_engine
+    - scaffold
