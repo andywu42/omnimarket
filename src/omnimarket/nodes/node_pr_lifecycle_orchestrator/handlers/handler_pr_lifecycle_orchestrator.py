@@ -27,19 +27,22 @@ Related:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from omnimarket.nodes.node_pr_lifecycle_orchestrator.protocols.protocol_sub_handlers import (
+    EnumPrCategory,
     EnumReducerIntent,
     FixResult,
     InventoryResult,
@@ -49,6 +52,7 @@ from omnimarket.nodes.node_pr_lifecycle_orchestrator.protocols.protocol_sub_hand
     ProtocolMergeHandler,
     ProtocolStateReducerHandler,
     ProtocolTriageHandler,
+    PrRecord,
     PrTriageResult,
     ReducerResult,
     TriageRecord,
@@ -180,72 +184,90 @@ class _SweepState:
 
 
 class _StubInventoryHandler:
-    async def handle(
-        self,
-        *,
-        correlation_id: UUID,
-        repos: tuple[str, ...] = (),
-        dry_run: bool = False,
-    ) -> InventoryResult:
+    """Stub matching HandlerPrLifecycleInventory.handle(input_model) signature."""
+
+    def handle(self, input_model: Any) -> Any:
         logger.warning("[PR-LIFECYCLE-ORCH] inventory stub called (sub-node not wired)")
         return InventoryResult(prs=(), total_collected=0)
 
 
 class _StubTriageHandler:
+    """Stub matching HandlerPrLifecycleTriage.handle(correlation_id, prs) signature."""
+
     async def handle(
         self,
-        *,
         correlation_id: UUID,
         prs: Any,
-    ) -> PrTriageResult:
+    ) -> Any:
         logger.warning("[PR-LIFECYCLE-ORCH] triage stub called (sub-node not wired)")
         return PrTriageResult(classified=(), green_count=0, non_green_count=0)
 
 
 class _StubReducerHandler:
+    """Stub matching HandlerPrLifecycleStateReducer.handle(*args, **kwargs) signature."""
+
     async def handle(
         self,
-        *,
-        correlation_id: UUID,
-        classified: Any,
-        dry_run: bool = False,
-        inventory_only: bool = False,
-        fix_only: bool = False,
-        merge_only: bool = False,
-    ) -> ReducerResult:
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         logger.warning("[PR-LIFECYCLE-ORCH] reducer stub called (sub-node not wired)")
         return ReducerResult(intents=(), merge_count=0, fix_count=0, skip_count=0)
 
 
 class _StubMergeHandler:
-    async def handle(
-        self,
-        *,
-        correlation_id: UUID,
-        prs_to_merge: Any,
-        dry_run: bool = False,
-    ) -> MergeResult:
+    """Stub matching HandlerPrLifecycleMerge.handle(command) signature."""
+
+    async def handle(self, command: Any) -> Any:
         logger.warning("[PR-LIFECYCLE-ORCH] merge stub called (sub-node not wired)")
         return MergeResult(prs_merged=0, prs_failed=0)
 
 
 class _StubFixHandler:
-    async def handle(
-        self,
-        *,
-        correlation_id: UUID,
-        prs_to_fix: Any,
-        dry_run: bool = False,
-        enable_admin_merge_fallback: bool = True,
-        admin_fallback_threshold_minutes: int = 30,
-    ) -> FixResult:
-        logger.warning(
-            "[PR-LIFECYCLE-ORCH] fix stub called "
-            "(sub-node not wired; admin_merge_fallback=%s threshold_min=%d)",
-            enable_admin_merge_fallback,
-            admin_fallback_threshold_minutes,
-        )
+    """Stub matching HandlerPrLifecycleFix.handle(command) signature."""
+
+    async def handle(self, command: Any) -> Any:
+        logger.warning("[PR-LIFECYCLE-ORCH] fix stub called (sub-node not wired)")
         return FixResult(prs_dispatched=0, prs_skipped=0)
+
+
+# ---------------------------------------------------------------------------
+# Model-translation helpers (PrRecord ↔ real sub-handler input models)
+# ---------------------------------------------------------------------------
+
+_CI_STATUS_MAP: dict[str, str] = {
+    "success": "passing",
+    "failure": "failing",
+    "pending": "pending",
+    "unknown": "unknown",
+}
+
+_REVIEW_STATUS_MAP: dict[str, str] = {
+    "APPROVED": "approved",
+    "CHANGES_REQUESTED": "changes_requested",
+    "REVIEW_REQUIRED": "pending",
+    "COMMENT": "pending",
+}
+
+
+def _map_ci_status(pr_state: Any) -> str:
+    """Map ModelPrState fields to orchestrator-internal checks_status string."""
+    if getattr(pr_state, "ci_passing", None) is True:
+        return "success"
+    if getattr(pr_state, "ci_passing", None) is False:
+        return "failure"
+    return "unknown"
+
+
+def _map_review_status(pr_state: Any) -> str:
+    """Map ModelPrState.review_decision to orchestrator-internal review_status."""
+    decision: str = getattr(pr_state, "review_decision", "") or ""
+    return _REVIEW_STATUS_MAP.get(decision.upper(), "unknown")
+
+
+def _orch_checks_to_ci_status(checks_status: str) -> str:
+    """Convert orchestrator checks_status to triage node's ci_status vocabulary."""
+    return _CI_STATUS_MAP.get(checks_status.lower(), "unknown")
 
 
 # ---------------------------------------------------------------------------
@@ -297,17 +319,152 @@ class HandlerPrLifecycleOrchestrator:
         self._fix = fix
         self._event_bus = event_bus
 
+    @staticmethod
+    def _check_protocol_conformance(
+        handler: object,
+        protocol_cls: type,
+        handler_name: str,
+    ) -> None:
+        """Verify handler conforms to the expected protocol at registration time.
+
+        ``@runtime_checkable`` ``isinstance()`` only checks for attribute
+        presence, not signature, so a drifted ``handle()`` (e.g. keyword-only
+        args where the protocol declares positional) would silently pass
+        ``isinstance`` and fail at dispatch with ``TypeError``. This method
+        adds a parameter-name comparison against the protocol's declared
+        ``handle()`` signature to catch that drift early.
+
+        Protocols that use ``*args, **kwargs`` (e.g. ProtocolStateReducerHandler)
+        are treated as accepting any signature and are not parameter-name
+        checked — only the presence of a callable ``handle`` is required.
+
+        Raises:
+            TypeError: if the handler does not conform to the protocol.
+        """
+        if not isinstance(handler, protocol_cls):
+            raise TypeError(
+                f"{handler_name} ({type(handler).__name__}) does not conform to "
+                f"{protocol_cls.__name__}: missing required 'handle' method"
+            )
+        handle_fn = getattr(handler, "handle", None)
+        if handle_fn is None or not callable(handle_fn):
+            raise TypeError(
+                f"{handler_name} ({type(handler).__name__}) has no callable 'handle' "
+                f"attribute — protocol {protocol_cls.__name__} requires it"
+            )
+        try:
+            handler_sig = inspect.signature(handle_fn)
+        except (ValueError, TypeError) as exc:
+            raise TypeError(
+                f"{handler_name} ({type(handler).__name__}).handle is not inspectable: {exc}"
+            ) from exc
+
+        proto_fn = getattr(protocol_cls, "handle", None)
+        if proto_fn is None:
+            return  # Protocol defines no handle — nothing to compare
+        try:
+            proto_sig = inspect.signature(proto_fn)
+        except (ValueError, TypeError):
+            return  # Protocol signature not inspectable — fall back to isinstance only
+
+        # Async/sync parity: registering a sync handler for an async protocol
+        # (or vice-versa) fails only at dispatch today. Catch it here.
+        proto_is_async = inspect.iscoroutinefunction(proto_fn)
+        handler_is_async = inspect.iscoroutinefunction(handle_fn)
+        if proto_is_async != handler_is_async:
+            raise TypeError(
+                f"{handler_name} ({type(handler).__name__}).handle is "
+                f"{'async' if handler_is_async else 'sync'} but "
+                f"{protocol_cls.__name__}.handle is "
+                f"{'async' if proto_is_async else 'sync'}. "
+                "Protocol async/sync signature drift — update the handler to match."
+            )
+
+        proto_params = [
+            p
+            for p in proto_sig.parameters.values()
+            if p.name != "self" and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+        ]
+        proto_has_var = any(
+            p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+            for p in proto_sig.parameters.values()
+        )
+        if proto_has_var and not proto_params:
+            # Protocol accepts any signature (e.g. reducer *args/**kwargs) —
+            # skip name-level comparison.
+            return
+
+        handler_params = [
+            p
+            for p in handler_sig.parameters.values()
+            if p.name != "self" and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+        ]
+        handler_param_names = [p.name for p in handler_params]
+        proto_param_names = {p.name for p in proto_params}
+
+        for expected_param in proto_params:
+            if expected_param.name not in handler_param_names:
+                raise TypeError(
+                    f"{handler_name} ({type(handler).__name__}).handle signature "
+                    f"drifted from {protocol_cls.__name__}: expected parameter "
+                    f"{expected_param.name!r} not found in handler signature "
+                    f"{handler_param_names}. Protocol requires "
+                    f"{[p.name for p in proto_params]}."
+                )
+            handler_param = handler_sig.parameters[expected_param.name]
+            # Reject drift where protocol declares POSITIONAL_OR_KEYWORD but
+            # handler has KEYWORD_ONLY (the canonical OMN-9234 drift shape).
+            if (
+                expected_param.kind
+                in (
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.POSITIONAL_ONLY,
+                )
+                and handler_param.kind == inspect.Parameter.KEYWORD_ONLY
+            ):
+                raise TypeError(
+                    f"{handler_name} ({type(handler).__name__}).handle parameter "
+                    f"{expected_param.name!r} is KEYWORD_ONLY but "
+                    f"{protocol_cls.__name__} declares it POSITIONAL_OR_KEYWORD. "
+                    "Protocol signature drift — update the handler to match."
+                )
+
+        # Reject extra required parameters on the handler (params not declared
+        # by the protocol and with no default). Such parameters make the
+        # handler uncallable via the protocol contract and surface only at
+        # dispatch today.
+        extra_required = [
+            p.name
+            for p in handler_params
+            if p.name not in proto_param_names and p.default is inspect.Parameter.empty
+        ]
+        if extra_required:
+            raise TypeError(
+                f"{handler_name} ({type(handler).__name__}).handle declares "
+                f"required parameter(s) {extra_required} not present in "
+                f"{protocol_cls.__name__}.handle signature "
+                f"{[p.name for p in proto_params]}. Make them optional (add "
+                "defaults) or remove them so the handler is callable via the "
+                "protocol contract."
+            )
+
     def _ensure_sub_handlers(self) -> None:
-        """Lazy-initialize sub-handlers via import fallback if not injected."""
+        """Lazy-initialize sub-handlers via import fallback if not injected.
+
+        Uses runtime conformance checks (isinstance + inspect.signature) instead
+        of cast() so that protocol drift surfaces at instantiation, not dispatch.
+        """
         if self._inventory is None:
             try:
                 from omnimarket.nodes.node_pr_lifecycle_inventory_compute.handlers.handler_pr_lifecycle_inventory import (
                     HandlerPrLifecycleInventory,
                 )
 
-                self._inventory = cast(
-                    ProtocolInventoryHandler, HandlerPrLifecycleInventory()
+                inv_handler = HandlerPrLifecycleInventory()
+                self._check_protocol_conformance(
+                    inv_handler, ProtocolInventoryHandler, "inventory"
                 )
+                self._inventory = inv_handler
             except ImportError:
                 self._inventory = _StubInventoryHandler()
         if self._triage is None:
@@ -316,7 +473,11 @@ class HandlerPrLifecycleOrchestrator:
                     HandlerPrLifecycleTriage,
                 )
 
-                self._triage = cast(ProtocolTriageHandler, HandlerPrLifecycleTriage())
+                triage_handler = HandlerPrLifecycleTriage()
+                self._check_protocol_conformance(
+                    triage_handler, ProtocolTriageHandler, "triage"
+                )
+                self._triage = triage_handler
             except ImportError:
                 self._triage = _StubTriageHandler()
         if self._reducer is None:
@@ -325,9 +486,11 @@ class HandlerPrLifecycleOrchestrator:
                     HandlerPrLifecycleStateReducer,
                 )
 
-                self._reducer = cast(
-                    ProtocolStateReducerHandler, HandlerPrLifecycleStateReducer()
+                reducer_handler = HandlerPrLifecycleStateReducer()
+                self._check_protocol_conformance(
+                    reducer_handler, ProtocolStateReducerHandler, "reducer"
                 )
+                self._reducer = reducer_handler
             except ImportError:
                 self._reducer = _StubReducerHandler()
         if self._merge is None:
@@ -336,7 +499,11 @@ class HandlerPrLifecycleOrchestrator:
                     HandlerPrLifecycleMerge,
                 )
 
-                self._merge = cast(ProtocolMergeHandler, HandlerPrLifecycleMerge())
+                merge_handler = HandlerPrLifecycleMerge()
+                self._check_protocol_conformance(
+                    merge_handler, ProtocolMergeHandler, "merge"
+                )
+                self._merge = merge_handler
             except ImportError:
                 self._merge = _StubMergeHandler()
         if self._fix is None:
@@ -345,7 +512,9 @@ class HandlerPrLifecycleOrchestrator:
                     HandlerPrLifecycleFix,
                 )
 
-                self._fix = cast(ProtocolFixHandler, HandlerPrLifecycleFix())
+                fix_handler = HandlerPrLifecycleFix()
+                self._check_protocol_conformance(fix_handler, ProtocolFixHandler, "fix")
+                self._fix = fix_handler
             except ImportError:
                 self._fix = _StubFixHandler()
 
@@ -406,8 +575,10 @@ class HandlerPrLifecycleOrchestrator:
             )
 
             assert self._inventory is not None
-            inv_result = await self._inventory.handle(
-                correlation_id=command.correlation_id,
+            # Real inventory handler signature: handle(input_model: ModelPrInventoryInput)
+            # The orchestrator aggregates across all repos; we call once per repo and
+            # merge the results into a single InventoryResult.
+            inv_result = await self._call_inventory(
                 repos=repos_filter,
                 dry_run=command.dry_run,
             )
@@ -432,7 +603,9 @@ class HandlerPrLifecycleOrchestrator:
             )
 
             assert self._triage is not None
-            triage_result = await self._triage.handle(
+            # Real triage handler signature: handle(correlation_id, prs: tuple[ModelPrInventoryItem])
+            # Convert PrRecord → ModelPrInventoryItem before calling.
+            triage_result = await self._call_triage(
                 correlation_id=command.correlation_id,
                 prs=inv_result.prs,
             )
@@ -496,7 +669,9 @@ class HandlerPrLifecycleOrchestrator:
                 )
 
                 assert self._merge is not None
-                merge_result = await self._merge.handle(
+                # Real merge handler signature: handle(command: ModelPrMergeCommand)
+                # Fan out: one command per PR, aggregate the results.
+                merge_result = await self._call_merge_fanout(
                     correlation_id=command.correlation_id,
                     prs_to_merge=merge_prs,
                     dry_run=command.dry_run,
@@ -572,6 +747,284 @@ class HandlerPrLifecycleOrchestrator:
         )
         return self._build_result(state, command.correlation_id)
 
+    def _enumerate_open_pr_numbers(self, repo: str) -> tuple[int, ...]:
+        """Enumerate open PR numbers for a single repo via the gh CLI.
+
+        Override in tests (or subclasses) to avoid real network calls.
+        Returns an empty tuple on any error. Non-zero ``gh`` exit codes are
+        logged with stderr so auth or rate-limit failures are visible rather
+        than silently producing zero PRs.
+        """
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--repo",
+                    repo,
+                    "--state",
+                    "open",
+                    "--limit",
+                    "100",
+                    "--json",
+                    "number",
+                    "--jq",
+                    ".[].number",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if proc.returncode != 0:
+                logger.warning(
+                    "[PR-LIFECYCLE-ORCH] gh pr list failed for repo=%s "
+                    "(returncode=%d): %s",
+                    repo,
+                    proc.returncode,
+                    proc.stderr.strip() or "<no stderr>",
+                )
+                return ()
+            return tuple(
+                int(n.strip()) for n in proc.stdout.splitlines() if n.strip().isdigit()
+            )
+        except Exception as exc:
+            logger.warning(
+                "[PR-LIFECYCLE-ORCH] failed to list PRs for repo=%s: %s",
+                repo,
+                exc,
+            )
+            return ()
+
+    def _enumerate_repos(self) -> tuple[str, ...]:
+        """Enumerate all org repos via the gh CLI.
+
+        Override in tests (or subclasses) to avoid real network calls.
+        Returns an empty tuple on any error. Non-zero ``gh`` exit codes are
+        logged with stderr so auth or rate-limit failures are visible rather
+        than silently producing zero repos.
+        """
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                [
+                    "gh",
+                    "repo",
+                    "list",
+                    "OmniNode-ai",
+                    "--limit",
+                    "100",
+                    "--json",
+                    "nameWithOwner",
+                    "--jq",
+                    ".[].nameWithOwner",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if proc.returncode != 0:
+                logger.warning(
+                    "[PR-LIFECYCLE-ORCH] gh repo list failed (returncode=%d): %s",
+                    proc.returncode,
+                    proc.stderr.strip() or "<no stderr>",
+                )
+                return ()
+            return tuple(r.strip() for r in proc.stdout.splitlines() if r.strip())
+        except Exception as exc:
+            logger.warning("[PR-LIFECYCLE-ORCH] failed to enumerate org repos: %s", exc)
+            return ()
+
+    async def _call_inventory(
+        self,
+        *,
+        repos: tuple[str, ...],
+        dry_run: bool,
+    ) -> InventoryResult:
+        """Call the inventory handler with its real input-model signature.
+
+        HandlerPrLifecycleInventory.handle() takes a ModelPrInventoryInput
+        with a single ``repo`` + list of PR numbers. For a full-org sweep the
+        orchestrator enumerates open PRs per repo (via _enumerate_open_pr_numbers),
+        then delegates each repo batch to the inventory handler.  When no repos
+        are specified, _enumerate_repos() discovers all org repos first.
+
+        Both enumeration methods are overridable hooks so tests can inject
+        synthetic PR data without real gh CLI calls.
+
+        This method wraps that per-repo fan-out and adapts the per-repo
+        ModelPrInventoryOutput results into the orchestrator-internal
+        InventoryResult (list of PrRecord).
+
+        Short-circuit: if the handler returns an InventoryResult directly
+        (i.e. a mock that bypasses ModelPrInventoryInput), that result is
+        returned as-is, allowing test mocks to return fixture data without
+        needing real PR number enumeration.
+        """
+        assert self._inventory is not None
+
+        from omnimarket.nodes.node_pr_lifecycle_inventory_compute.models.model_pr_lifecycle_inventory import (
+            ModelPrInventoryInput,
+        )
+
+        if not repos:
+            repos = self._enumerate_repos()
+
+        all_prs: list[PrRecord] = []
+        for repo in repos:
+            pr_numbers = self._enumerate_open_pr_numbers(repo)
+            if not pr_numbers:
+                continue
+
+            input_model = ModelPrInventoryInput(repo=repo, pr_numbers=pr_numbers)
+            raw = self._inventory.handle(input_model)
+            # Short-circuit: test stub returned InventoryResult directly.
+            if isinstance(raw, InventoryResult):
+                return raw
+            # raw is ModelPrInventoryOutput; adapt to PrRecord sequence.
+            for pr_state in getattr(raw, "pr_states", ()):
+                all_prs.append(
+                    PrRecord(
+                        pr_number=pr_state.pr_number,
+                        repo=pr_state.repo,
+                        title=getattr(pr_state, "title", ""),
+                        branch=getattr(pr_state, "head_ref", ""),
+                        checks_status=_map_ci_status(pr_state),
+                        review_status=_map_review_status(pr_state),
+                        has_conflicts=getattr(pr_state, "has_conflicts", False),
+                        merge_state_status=getattr(
+                            pr_state, "merge_state_status", None
+                        ),
+                    )
+                )
+
+        return InventoryResult(prs=tuple(all_prs), total_collected=len(all_prs))
+
+    async def _call_triage(
+        self,
+        *,
+        correlation_id: UUID,
+        prs: tuple[PrRecord, ...],
+    ) -> PrTriageResult:
+        """Call the triage handler with its real signature.
+
+        HandlerPrLifecycleTriage.handle(correlation_id, prs: tuple[ModelPrInventoryItem])
+        → ModelPrTriageOutput.
+
+        Adapts PrRecord → ModelPrInventoryItem before the call, then maps
+        ModelPrTriageOutput → PrTriageResult.
+        """
+        assert self._triage is not None
+
+        from omnimarket.nodes.node_pr_lifecycle_triage_compute.models.model_pr_inventory_item import (
+            ModelPrInventoryItem,
+        )
+
+        items = tuple(
+            ModelPrInventoryItem(
+                pr_number=pr.pr_number,
+                repo=pr.repo,
+                title=pr.title,
+                branch=pr.branch,
+                ci_status=_orch_checks_to_ci_status(pr.checks_status),
+                has_conflicts=pr.has_conflicts,
+                approved=(pr.review_status == "approved"),
+            )
+            for pr in prs
+        )
+
+        raw = await self._triage.handle(correlation_id, items)
+
+        # Short-circuit: test stub returned PrTriageResult directly.
+        if isinstance(raw, PrTriageResult):
+            return raw
+
+        # Map ModelPrTriageOutput → PrTriageResult
+        classified: list[TriageRecord] = []
+        green_count = 0
+        non_green_count = 0
+        for result in getattr(raw, "results", ()):
+            cat_value: str = getattr(
+                getattr(result, "category", None),
+                "value",
+                str(getattr(result, "category", "unknown")),
+            )
+            try:
+                category = EnumPrCategory(cat_value)
+            except ValueError:
+                category = EnumPrCategory.UNKNOWN
+            classified.append(
+                TriageRecord(
+                    pr_number=result.pr_number,
+                    repo=result.repo,
+                    category=category,
+                    block_reason=getattr(result, "reason", ""),
+                )
+            )
+            if category == EnumPrCategory.GREEN:
+                green_count += 1
+            else:
+                non_green_count += 1
+
+        return PrTriageResult(
+            classified=tuple(classified),
+            green_count=green_count,
+            non_green_count=non_green_count,
+        )
+
+    async def _call_merge_fanout(
+        self,
+        *,
+        correlation_id: UUID,
+        prs_to_merge: tuple[TriageRecord, ...],
+        dry_run: bool,
+    ) -> MergeResult:
+        """Fan out merge commands to the merge handler (one command per PR).
+
+        HandlerPrLifecycleMerge.handle(command: ModelPrMergeCommand) → ModelPrMergeResult.
+        """
+        assert self._merge is not None
+
+        from omnimarket.nodes.node_pr_lifecycle_merge_effect.models.model_merge_command import (
+            ModelPrMergeCommand,
+        )
+
+        prs_merged = 0
+        prs_failed = 0
+        for pr in prs_to_merge:
+            merge_command = ModelPrMergeCommand(
+                correlation_id=correlation_id,
+                pr_number=pr.pr_number,
+                repo=pr.repo,
+                triage_verdict=pr.category.value,
+                dry_run=dry_run,
+                requested_at=datetime.now(tz=UTC),
+            )
+            try:
+                raw = await self._merge.handle(merge_command)
+            except Exception as exc:
+                # Per-PR isolation: one transient GitHub/network failure must
+                # not abort the whole sweep. Count this PR as failed and move on.
+                logger.exception(
+                    "[PR-LIFECYCLE-ORCH] merge handler raised for "
+                    "correlation_id=%s repo=%s pr=%d: %s",
+                    correlation_id,
+                    pr.repo,
+                    pr.pr_number,
+                    exc,
+                )
+                prs_failed += 1
+                continue
+            if getattr(raw, "merged", False):
+                prs_merged += 1
+            else:
+                prs_failed += 1
+
+        return MergeResult(prs_merged=prs_merged, prs_failed=prs_failed)
+
     async def _dispatch_fix_parallel(
         self,
         *,
@@ -595,15 +1048,30 @@ class HandlerPrLifecycleOrchestrator:
 
         async def _fix_one(pr: TriageRecord) -> FixResult:
             async with semaphore:
-                raw = await self._fix.handle(  # type: ignore[union-attr]
-                    correlation_id=correlation_id,
-                    prs_to_fix=(pr,),
-                    dry_run=dry_run,
-                    enable_admin_merge_fallback=enable_admin_merge_fallback,
-                    admin_fallback_threshold_minutes=admin_fallback_threshold_minutes,
+                # Real fix handler signature: handle(command: ModelPrLifecycleFixCommand)
+                # Construct command from TriageRecord fields.
+                from omnimarket.nodes.node_pr_lifecycle_fix_effect.models.model_fix_command import (
+                    EnumPrBlockReason,
+                    ModelPrLifecycleFixCommand,
                 )
-                # The real fix handler returns ModelPrLifecycleFixResult (per-PR).
-                # Map it to the aggregated FixResult the orchestrator expects.
+
+                block_reason_str = pr.block_reason or "ci_failure"
+                try:
+                    block_reason = EnumPrBlockReason(block_reason_str)
+                except ValueError:
+                    block_reason = EnumPrBlockReason.CI_FAILURE
+
+                fix_command = ModelPrLifecycleFixCommand(
+                    correlation_id=correlation_id,
+                    pr_number=pr.pr_number,
+                    repo=pr.repo,
+                    block_reason=block_reason,
+                    dry_run=dry_run,
+                    requested_at=datetime.now(tz=UTC),
+                )
+                assert self._fix is not None
+                raw = await self._fix.handle(fix_command)
+                # Map ModelPrLifecycleFixResult → FixResult aggregate.
                 if isinstance(raw, FixResult):
                     return raw
                 fix_applied: bool = getattr(raw, "fix_applied", False)
