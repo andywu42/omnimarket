@@ -46,10 +46,14 @@ Related:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from omnimarket.nodes.node_overseer_verifier.handlers.handler_overseer_verifier import (
     HandlerOverseerVerifier,
@@ -58,10 +62,34 @@ from omnimarket.nodes.node_overseer_verifier.models.model_verifier_request impor
     ModelVerifierRequest,
 )
 
+if TYPE_CHECKING:
+    from omnibase_core.protocols.event_bus.protocol_event_bus_publisher import (
+        ProtocolEventBusPublisher,
+    )
+
 TOPIC_OVERSEER_VERIFIER_COMPLETED = "onex.evt.omnimarket.overseer-verifier-completed.v1"
 TOPIC_OVERSEER_VERIFY = "onex.cmd.omnimarket.overseer-verify.v1"
 
 logger = logging.getLogger(__name__)
+
+
+def _load_contract(contract_path: Path | None = None) -> dict[str, Any]:
+    """Load the node's contract.yaml."""
+    _path = contract_path or Path(__file__).parent.parent / "contract.yaml"
+    with open(_path) as f:
+        data: dict[str, Any] = yaml.safe_load(f)
+    return data
+
+
+def _topic_verification_receipt_start() -> str:
+    """Load the verification-receipt-start topic from contract.yaml at import time."""
+    publish_topics: list[str] = (
+        _load_contract().get("event_bus", {}).get("publish_topics", [])
+    )
+    return next((t for t in publish_topics if "verification-receipt-start" in t), "")
+
+
+TOPIC_VERIFICATION_RECEIPT_START = _topic_verification_receipt_start()
 
 # Re-export canonical topic names for callers that import from this module.
 TOPIC_SUBSCRIBE = TOPIC_OVERSEER_VERIFY
@@ -75,6 +103,10 @@ class HandlerOverseerVerifierConsumer:
     publishes the completion event. Designed to run inside the ONEX runtime
     or any event bus infrastructure.
 
+    Also publishes verification-receipt-start.v1 when an inbound command
+    carries a task_id, enabling node_verification_receipt_generator to produce
+    formal evidence receipts alongside the deterministic verification.
+
     Usage (standalone / testing)::
 
         consumer = HandlerOverseerVerifierConsumer()
@@ -85,8 +117,9 @@ class HandlerOverseerVerifierConsumer:
     the contract.yaml topic declarations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, event_bus: ProtocolEventBusPublisher | None = None) -> None:
         self._verifier = HandlerOverseerVerifier()
+        self._event_bus = event_bus
 
     def process(self, raw: bytes) -> bytes:
         """Process a raw verify-command message and return the completion event bytes.
@@ -110,6 +143,16 @@ class HandlerOverseerVerifierConsumer:
         if not correlation_id:
             logger.warning(
                 "[OVERSEER-CONSUMER] Missing correlation_id — cannot correlate response"
+            )
+
+        task_id_raw = data.get("task_id")
+        if task_id_raw is not None:
+            self._publish_verification_receipt_start_sync(
+                task_id=str(task_id_raw),
+                correlation_id=correlation_id,
+                claim=str(data.get("status", "")),
+                repo=data.get("repo"),
+                pr_number=data.get("pr_number"),
             )
 
         try:
@@ -169,6 +212,61 @@ class HandlerOverseerVerifierConsumer:
         )
 
         return json.dumps(response).encode()
+
+    def _publish_verification_receipt_start_sync(
+        self,
+        *,
+        task_id: str,
+        correlation_id: str,
+        claim: str,
+        repo: Any,
+        pr_number: Any,
+    ) -> None:
+        """Fire-and-forget publish of verification-receipt-start.v1.
+
+        Must be called from within a running event loop (the ONEX runtime
+        always provides one). Schedules the publish as a task so the sync
+        process() method returns immediately. If no event loop is running
+        the publish is silently skipped and a warning is emitted — callers
+        in pure sync contexts should use the async path directly.
+        """
+        if self._event_bus is None:
+            return
+        import asyncio
+
+        payload: dict[str, Any] = {
+            "task_id": task_id,
+            "claim": claim,
+            "correlation_id": correlation_id,
+        }
+        if repo is not None:
+            payload["repo"] = str(repo)
+        if pr_number is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                payload["pr_number"] = int(pr_number)
+
+        encoded = json.dumps(payload).encode()
+
+        async def _publish() -> None:
+            await self._event_bus.publish(  # type: ignore[union-attr]
+                topic=TOPIC_VERIFICATION_RECEIPT_START,
+                key=None,
+                value=encoded,
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning(
+                "[OVERSEER-CONSUMER] No running event loop — skipping "
+                "verification-receipt-start publish for task_id=%s",
+                task_id,
+            )
+            return
+
+        _task = loop.create_task(_publish())
+        # Retain reference to prevent GC before the coroutine completes.
+        _task.add_done_callback(lambda _: None)
 
     def _error_response(self, *, correlation_id: str, summary: str) -> bytes:
         """Return a FAIL completion event for error cases."""
