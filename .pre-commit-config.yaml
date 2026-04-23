@@ -78,6 +78,14 @@ repos:
         args: [--fix, --exit-non-zero-on-fix, src/, tests/]
         pass_filenames: false
 
+  - repo: local
+    hooks:
+      - id: normalization-symmetry
+        name: normalization-symmetry
+        entry: uv run python -m omnibase_core.validation.checker_normalization_symmetry
+        language: system
+        pass_filenames: false
+
 # Configuration
 default_install_hook_types: [pre-commit]
 default_stages: [pre-commit]

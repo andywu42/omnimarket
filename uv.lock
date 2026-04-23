@@ -1531,37 +1531,16 @@ wheels = [
 [[package]]
 name = "omnibase-compat"
 version = "0.3.1"
-source = { editable = "../omnibase_compat" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_compat.git?branch=main#e850cc3a2f6779957e2d5693005eb5a4a7391b6c" }
 dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "typing-extensions", specifier = ">=4.5.0" },
-]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.9" },
-    { name = "pre-commit" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-cov" },
-    { name = "ruff", specifier = ">=0.4" },
-]
-
 [[package]]
 name = "omnibase-core"
 version = "0.39.0"
-source = { editable = "../omnibase_core" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=main#df60d650121a0314dd4fbd4e55429751a696e161" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1573,56 +1552,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "blake3", specifier = ">=1.0.8,<2.0.0" },
-    { name = "click", specifier = ">=8.3.1,<9.0.0" },
-    { name = "cryptography", specifier = ">=46.0.3,<47.0.0" },
-    { name = "deepdiff", specifier = ">=8.0.0,<10.0.0" },
-    { name = "dependency-injector", specifier = ">=4.48.3,<5.0.0" },
-    { name = "httpx", specifier = ">=0.27.0,<1.0.0" },
-    { name = "jsonschema", specifier = ">=4.25.1,<5.0.0" },
-    { name = "omnibase-spi", marker = "extra == 'full'", specifier = ">=0.20.2" },
-    { name = "omnibase-spi", marker = "extra == 'spi'", specifier = ">=0.20.2" },
-    { name = "prometheus-client", marker = "extra == 'full'", specifier = ">=0.21.0,<1.0.0" },
-    { name = "prometheus-client", marker = "extra == 'metrics'", specifier = ">=0.21.0,<1.0.0" },
-    { name = "psutil", marker = "extra == 'cli'", specifier = ">=7.2.1" },
-    { name = "psutil", marker = "extra == 'full'", specifier = ">=7.2.1" },
-    { name = "pydantic", specifier = ">=2.12.5,<3.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
-    { name = "redis", marker = "extra == 'cache'", specifier = ">=5.0.0,<8.0.0" },
-    { name = "redis", marker = "extra == 'full'", specifier = ">=5.0.0,<8.0.0" },
-    { name = "ruamel-yaml", specifier = ">=0.18.0" },
-    { name = "sqlglot", marker = "extra == 'full'", specifier = ">=26.0.0,<31.0.0" },
-    { name = "sqlglot", marker = "extra == 'sql-parser'", specifier = ">=26.0.0,<31.0.0" },
-]
-provides-extras = ["spi", "cli", "cache", "metrics", "sql-parser", "full"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "hypothesis", specifier = ">=6.150" },
-    { name = "interrogate", specifier = ">=1.7.0" },
-    { name = "mypy", specifier = ">=1.19.1" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main" },
-    { name = "pre-commit", specifier = ">=4.5.1" },
-    { name = "prometheus-client", specifier = ">=0.21.0,<1.0.0" },
-    { name = "psutil", specifier = ">=7.2.1" },
-    { name = "pyright", specifier = ">=1.1.408" },
-    { name = "pytest", specifier = ">=8.4.0" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-rerunfailures", specifier = ">=16.1" },
-    { name = "pytest-split", specifier = ">=0.10.0" },
-    { name = "pytest-testmon", specifier = ">=2.2.0" },
-    { name = "pytest-timeout", specifier = ">=2.4.0" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "ruff", specifier = ">=0.14.13,<0.16.0" },
-    { name = "sqlglot", specifier = ">=26.0.0,<31.0.0" },
-    { name = "types-psutil", specifier = ">=7.2.1.20260116" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20250822" },
-    { name = "types-requests", specifier = ">=2.32.4.20250913" },
 ]
 
 [[package]]
@@ -1683,15 +1612,11 @@ wheels = [
 [[package]]
 name = "omnibase-spi"
 version = "0.20.4"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_spi.git?branch=main#168c71a622f6592978344faaa95ff809b70a15cb" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/38/ed/23668a820fea9b87a88f619f8df1944e8522d7f2ff8d2e34993709be69f7/omnibase_spi-0.20.4.tar.gz", hash = "sha256:79a81568150d89c97f97661cd7ad1443258cc5fdb46c380c9306b02c65001073", size = 1119882, upload-time = "2026-04-03T08:29:09.403Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/1f/e41b898a9f023795376e2a254e64c27889427155c42555a872cdcc0ee67e/omnibase_spi-0.20.4-py3-none-any.whl", hash = "sha256:dc263d4e0474a9031f5159e90ba05c3cb318703740e236b717d61072962921b7", size = 758280, upload-time = "2026-04-03T08:29:07.755Z" },
 ]
 
 [[package]]
@@ -1705,6 +1630,7 @@ dependencies = [
     { name = "omnibase-compat" },
     { name = "omnibase-core" },
     { name = "omnibase-infra" },
+    { name = "omnibase-spi" },
     { name = "omninode-memory" },
     { name = "onex-change-control" },
     { name = "packaging" },
@@ -1728,10 +1654,11 @@ requires-dist = [
     { name = "aiokafka", specifier = ">=0.11.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-compat", editable = "../omnibase_compat" },
-    { name = "omnibase-core", editable = "../omnibase_core" },
+    { name = "omnibase-compat", git = "https://github.com/OmniNode-ai/omnibase_compat.git?branch=main" },
+    { name = "omnibase-core", specifier = ">=0.39.0" },
     { name = "omnibase-infra", specifier = ">=0.32.0" },
-    { name = "omninode-memory", editable = "../omnimemory" },
+    { name = "omnibase-spi", git = "https://github.com/OmniNode-ai/omnibase_spi.git?branch=main" },
+    { name = "omninode-memory", git = "https://github.com/OmniNode-ai/omnimemory.git?branch=main" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
@@ -1752,7 +1679,7 @@ dev = [
 [[package]]
 name = "omninode-memory"
 version = "0.15.0"
-source = { editable = "../omnimemory" }
+source = { git = "https://github.com/OmniNode-ai/omnimemory.git?branch=main#87355d7d2bf675565b37de93056581cae48d3c08" }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
@@ -1778,57 +1705,6 @@ dependencies = [
     { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.12.15,<4.0.0" },
-    { name = "alembic", specifier = ">=1.13.0,<2.0.0" },
-    { name = "asyncio-mqtt", specifier = ">=0.16.0,<1.0.0" },
-    { name = "asyncpg", specifier = ">=0.29.0,<1.0.0" },
-    { name = "cachetools", specifier = ">=6.2.4,<8.0.0" },
-    { name = "fastapi", specifier = ">=0.120.1,<1.0.0" },
-    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
-    { name = "httpx", marker = "extra == 'graph'", specifier = ">=0.27.0,<1.0.0" },
-    { name = "mcp", specifier = ">=1.8.0,<2.0.0" },
-    { name = "neo4j", marker = "extra == 'graph'", specifier = ">=5.0.0,<6.0.0" },
-    { name = "omnibase-core", specifier = "==0.39.0" },
-    { name = "omnibase-infra", specifier = "==0.32.0" },
-    { name = "omnibase-spi", specifier = "==0.20.4" },
-    { name = "pinecone-client", specifier = ">=4.1.0,<7.0.0" },
-    { name = "psutil", specifier = ">=7.0.0,<8.0.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.10,<3.0.0" },
-    { name = "pydantic", specifier = ">=2.10.0,<3.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.10.1,<3.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.3,<7.0.0" },
-    { name = "qdrant-client", specifier = ">=1.7.0,<1.18.0" },
-    { name = "qdrant-client", marker = "extra == 'graph'", specifier = ">=1.9.0,<1.18.0" },
-    { name = "redis", specifier = ">=6.4.0,<8.0.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
-    { name = "structlog", specifier = ">=25.5.0,<26.0.0" },
-    { name = "supabase", specifier = ">=2.9.0,<3.0.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0,<1.0.0" },
-]
-provides-extras = ["graph"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "detect-secrets", specifier = ">=1.5.0,<2.0.0" },
-    { name = "docker", specifier = ">=7.1.0,<8.0.0" },
-    { name = "memory-profiler", specifier = ">=0.61.0" },
-    { name = "mypy", specifier = ">=1.14.0,<2.0.0" },
-    { name = "pre-commit", specifier = ">=4.0.1,<5.0.0" },
-    { name = "pyright", specifier = ">=1.1.408" },
-    { name = "pytest", specifier = ">=8.3.4,<10.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.25.0,<2.0.0" },
-    { name = "pytest-cov", specifier = ">=6.0.0,<8.0.0" },
-    { name = "pytest-split", specifier = ">=0.10.0,<1.0.0" },
-    { name = "pytest-timeout", specifier = ">=2.3.1,<3.0.0" },
-    { name = "pytest-xdist", specifier = ">=3.8.0,<4.0.0" },
-    { name = "ruff", specifier = ">=0.8.0,<1.0.0" },
-    { name = "types-cachetools", specifier = ">=6.2.0" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
 ]
 
 [[package]]

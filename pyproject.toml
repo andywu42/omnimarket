@@ -31,6 +31,7 @@ classifiers = [
 dependencies = [
     "omnibase_core>=0.39.0",
     "omnibase-compat>=0.3.1",
+    "omnibase-spi>=0.20.4",
     "omnibase-infra>=0.32.0",
     "onex-change-control>=0.5.0",
     "pydantic>=2.12.5,<3.0.0",
@@ -51,7 +52,10 @@ Repository = "https://github.com/OmniNode-ai/omnimarket"
 [project.entry-points."onex.nodes"]
 node_aislop_sweep = "omnimarket.nodes.node_aislop_sweep"
 node_authorize = "omnimarket.nodes.node_authorize"
-node_merge_sweep = "omnimarket.nodes.node_merge_sweep"
+node_kafka_topic_emit_probe = "omnimarket.nodes.node_kafka_topic_emit_probe"
+node_merge_effect = "omnimarket.nodes.node_merge_effect"
+node_worker_stall_recovery = "omnimarket.nodes.node_worker_stall_recovery"
+node_merge_sweep_compute = "omnimarket.nodes.node_merge_sweep_compute"
 node_ledger_orchestrator = "omnimarket.nodes.node_ledger_orchestrator"
 node_ledger_append_effect = "omnimarket.nodes.node_ledger_append_effect"
 node_ledger_hash_compute = "omnimarket.nodes.node_ledger_hash_compute"
@@ -170,6 +174,11 @@ node_merge_sweep_state_reducer = "omnimarket.nodes.node_merge_sweep_state_reduce
 node_projection_query = "omnimarket.nodes.node_projection_query"
 node_thread_reply_effect = "omnimarket.nodes.node_thread_reply_effect"
 node_polish_task_classifier = "omnimarket.nodes.node_polish_task_classifier"
+node_fixer_dispatcher = "omnimarket.nodes.node_fixer_dispatcher"
+node_verification_receipt_generator = "omnimarket.nodes.node_verification_receipt_generator"
+
+node_two_strike_arbiter = "omnimarket.nodes.node_two_strike_arbiter"
+node_audit_trail_compactor = "omnimarket.nodes.node_audit_trail_compactor"
 
 [project.scripts]
 onex-integration-test-runner = "omnimarket.nodes.node_integration_test_runner.cli:main"
@@ -178,9 +187,9 @@ onex-integration-test-runner = "omnimarket.nodes.node_integration_test_runner.cl
 omnimarket = "omnimarket.nodes"
 
 [tool.uv.sources]
-omnibase-core = { path = "../omnibase_core", editable = true }
-omnibase-compat = { path = "../omnibase_compat", editable = true }
-omninode-memory = { path = "../omnimemory", editable = true }
+omnibase-compat = { git = "https://github.com/OmniNode-ai/omnibase_compat.git", branch = "main" }
+omnibase-spi = { git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch = "main" }
+omninode-memory = { git = "https://github.com/OmniNode-ai/omnimemory.git", branch = "main" }
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
 
 [tool.hatch.build.targets.wheel]
@@ -249,6 +258,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["aiokafka", "aiokafka.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
